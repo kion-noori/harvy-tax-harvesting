@@ -11,7 +11,7 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
   const [processingStep, setProcessingStep] = useState('');
   const [txResult, setTxResult] = useState(null);
 
-  // Store purchase prices for each ordinal (keyed by inscription id)
+  // Store purchase prices as STRINGS to preserve user input (allows "0.00" typing)
   const [purchasePrices, setPurchasePrices] = useState({});
 
   const [userTaxRate, setUserTaxRate] = useState(30);
@@ -25,9 +25,10 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
     selectedOrdinals.forEach(ord => {
       const savedPrice = localStorage.getItem(`ordinal-price-${ord.inscription.id}`);
       if (savedPrice) {
-        initialPrices[ord.inscription.id] = parseFloat(savedPrice);
+        // Keep as string for display
+        initialPrices[ord.inscription.id] = savedPrice;
       } else if (ord.activity?.lastPurchasePrice) {
-        initialPrices[ord.inscription.id] = ord.activity.lastPurchasePrice;
+        initialPrices[ord.inscription.id] = String(ord.activity.lastPurchasePrice);
       }
     });
     setPurchasePrices(initialPrices);
@@ -50,19 +51,28 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
     fetchBTCPrice();
   }, []);
 
-  // Handle price change for an ordinal
+  // Handle price change for an ordinal - keep as string to allow typing "0.001"
   const handlePriceChange = (inscriptionId, value) => {
-    const numValue = parseFloat(value) || null;
+    // Store the raw string value for display
     setPurchasePrices(prev => ({
       ...prev,
-      [inscriptionId]: numValue
+      [inscriptionId]: value
     }));
-    // Also save to localStorage
-    if (numValue) {
+    // Save to localStorage if it's a valid number
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue > 0) {
       localStorage.setItem(`ordinal-price-${inscriptionId}`, value);
-    } else {
+    } else if (value === '' || value === null) {
       localStorage.removeItem(`ordinal-price-${inscriptionId}`);
     }
+  };
+
+  // Helper to get numeric value from string price
+  const getNumericPrice = (inscriptionId) => {
+    const strValue = purchasePrices[inscriptionId];
+    if (!strValue) return null;
+    const num = parseFloat(strValue);
+    return isNaN(num) ? null : num;
   };
 
   // Calculate totals
@@ -72,7 +82,7 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
     let validCount = 0;
 
     selectedOrdinals.forEach(ord => {
-      const purchasePrice = purchasePrices[ord.inscription.id];
+      const purchasePrice = getNumericPrice(ord.inscription.id);
       const currentPrice = ord.currentPrice;
 
       if (purchasePrice && purchasePrice > 0) {
@@ -126,7 +136,7 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
 
   // Check if all ordinals have purchase prices
   const allHavePrices = selectedOrdinals.every(ord => {
-    const price = purchasePrices[ord.inscription.id];
+    const price = getNumericPrice(ord.inscription.id);
     return price && price > 0;
   });
 
@@ -153,7 +163,7 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
       // Build ordinals array for batch endpoint
       const ordinalsData = selectedOrdinals.map(ord => ({
         inscriptionId: ord.inscription.id,
-        purchasePriceSats: Math.round(purchasePrices[ord.inscription.id] * 100000000),
+        purchasePriceSats: Math.round(getNumericPrice(ord.inscription.id) * 100000000),
         currentPriceSats: Math.round((ord.currentPrice || 0) * 100000000),
       }));
 

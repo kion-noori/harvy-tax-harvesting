@@ -2712,3 +2712,85 @@ body > * {
 .clear-selection-btn:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* ==================== Onboarding Section ==================== */
+
+.onboarding-section {
+  margin-bottom: 24px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(247, 147, 26, 0.08) 0%, rgba(255, 107, 53, 0.05) 100%);
+  border: 1px solid rgba(247, 147, 26, 0.25);
+  border-radius: 16px;
+}
+
+.onboarding-title {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 20px 0;
+  text-align: center;
+}
+
+.onboarding-steps {
+  display: flex;
+  justify-content: space-around;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.onboarding-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.onboarding-step .step-number {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #F7931A 0%, #FF6B35 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.onboarding-step .step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.onboarding-step .step-content strong {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.onboarding-step .step-content span {
+  color: #aaa;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ==================== Card Hover States ==================== */
+
+.ordinal-price-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(247, 147, 26, 0.5);
+  box-shadow: 0 8px 24px rgba(247, 147, 26, 0.15);
+}
+
+.ordinal-price-card:hover::before {
+  opacity: 0.8;
+}
+
+.ordinal-price-card:hover .ordinal-card-header {
+  color: #F7931A;
+}

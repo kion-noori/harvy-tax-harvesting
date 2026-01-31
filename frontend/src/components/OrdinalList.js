@@ -313,19 +313,33 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType }
         </label>
       </div>
 
-      {/* Selection hint */}
+      {/* How it works - onboarding section */}
       {!loading && items.length > 0 && selectedIds.size === 0 && (
-        <div style={{
-          marginBottom: 16,
-          padding: '12px 16px',
-          background: 'rgba(247, 147, 26, 0.1)',
-          border: '1px solid rgba(247, 147, 26, 0.2)',
-          borderRadius: '8px',
-          color: '#F7931A',
-          fontSize: '14px',
-          textAlign: 'center'
-        }}>
-          Click on ordinals to select them for selling
+        <div className="onboarding-section">
+          <h3 className="onboarding-title">How to Harvest Tax Losses</h3>
+          <div className="onboarding-steps">
+            <div className="onboarding-step">
+              <div className="step-number">1</div>
+              <div className="step-content">
+                <strong>Select ordinals</strong>
+                <span>Click on any ordinal below to select it</span>
+              </div>
+            </div>
+            <div className="onboarding-step">
+              <div className="step-number">2</div>
+              <div className="step-content">
+                <strong>Enter purchase prices</strong>
+                <span>Tell us what you paid for each one</span>
+              </div>
+            </div>
+            <div className="onboarding-step">
+              <div className="step-number">3</div>
+              <div className="step-content">
+                <strong>Sell to Harvy</strong>
+                <span>We buy them, you get the tax write-off</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

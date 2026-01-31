@@ -4,9 +4,11 @@ import { useOrdinalActivity } from '../hooks/useOrdinalActivity';
 import { useOrdinalValue } from '../hooks/useOrdinalValue';
 
 /**
- * Card component that displays an ordinal with purchase price, current value, and gain/loss
+ * Card component that displays an ordinal in a gallery view
+ * Shows media, inscription number, and current value estimate
+ * Click to select for bulk selling
  */
-export default function OrdinalPriceCard({ inscription, onActivityData, onValueData }) {
+export default function OrdinalPriceCard({ inscription, onActivityData, onValueData, isSelected, onSelect }) {
   const { activity, loading: loadingActivity } = useOrdinalActivity(inscription.id);
   const { value, loading: loadingValue } = useOrdinalValue(inscription.id);
 
@@ -23,24 +25,29 @@ export default function OrdinalPriceCard({ inscription, onActivityData, onValueD
     }
   }, [value, loadingValue, onValueData]);
 
-  const purchasePrice = activity?.lastPurchasePrice;
-  const hasPurchasePrice = purchasePrice !== null && purchasePrice !== undefined;
-
   // Use listed price if available, otherwise use collection floor price as estimate
   const currentPrice = value?.currentPrice || value?.floorPrice;
   const hasCurrentPrice = currentPrice !== null && currentPrice !== undefined;
 
-  // Calculate gain/loss
-  const hasGainLoss = hasPurchasePrice && hasCurrentPrice;
-  const gainLoss = hasGainLoss ? currentPrice - purchasePrice : null;
-  const gainLossPercent = hasGainLoss ? ((gainLoss / purchasePrice) * 100) : null;
-  const isLoss = gainLoss !== null && gainLoss < 0;
-  const isGain = gainLoss !== null && gainLoss > 0;
-
-  const loading = loadingActivity || loadingValue;
+  // Handle card click for selection
+  const handleClick = () => {
+    if (onSelect) {
+      onSelect(inscription.id);
+    }
+  };
 
   return (
-    <div className="ordinal-price-card">
+    <div
+      className={`ordinal-price-card ${isSelected ? 'selected' : ''}`}
+      onClick={handleClick}
+    >
+      {/* Selection indicator */}
+      {isSelected && (
+        <div className="selection-indicator">
+          <span className="selection-check">✓</span>
+        </div>
+      )}
+
       {/* Inscription number */}
       <div className="ordinal-card-header">
         {typeof inscription.number === 'number'
@@ -49,64 +56,24 @@ export default function OrdinalPriceCard({ inscription, onActivityData, onValueD
       </div>
 
       {/* Ordinal media */}
-      <OrdinalMedia id={inscription.id} contentType={inscription.content_type} />
+      <div className="ordinal-media-container">
+        <OrdinalMedia id={inscription.id} contentType={inscription.content_type} />
+      </div>
 
-      {/* Price information section */}
-      <div className="ordinal-card-prices">
-        {loading ? (
-          <div className="ordinal-card-loading">
-            <div className="loading-spinner"></div>
-            <span>Loading price data...</span>
+      {/* Simplified price info - just current value */}
+      <div className="ordinal-card-footer">
+        {loadingValue ? (
+          <div className="price-value-loading">
+            <span className="mini-spinner"></span>
+            <span>Loading...</span>
+          </div>
+        ) : hasCurrentPrice ? (
+          <div className="price-value-simple">
+            {value?.isListed ? 'Listed: ' : 'Est: '}
+            {currentPrice.toFixed(6)} BTC
           </div>
         ) : (
-          <>
-            {/* Purchase Price */}
-            {hasPurchasePrice && (
-              <div className="price-row">
-                <div className="price-label">Purchase Price</div>
-                <div className="price-value">{purchasePrice.toFixed(8)} BTC</div>
-                {activity?.lastPurchaseDate && (
-                  <div className="price-date">
-                    {new Date(activity.lastPurchaseDate).toLocaleDateString()}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Current Value */}
-            {hasCurrentPrice && (
-              <div className="price-row">
-                <div className="price-label">
-                  {value?.isListed ? 'Listed Price' : 'Est. Value (Floor)'}
-                </div>
-                <div className="price-value">{currentPrice.toFixed(8)} BTC</div>
-              </div>
-            )}
-
-            {/* Gain/Loss Display */}
-            {hasGainLoss && (
-              <div className={`gain-loss-row ${isLoss ? 'loss' : isGain ? 'gain' : 'neutral'}`}>
-                <div className="gain-loss-label">
-                  {isLoss ? 'Unrealized Loss' : isGain ? 'Unrealized Gain' : 'Break Even'}
-                </div>
-                <div className="gain-loss-value">
-                  <span className="gain-loss-amount">
-                    {gainLoss >= 0 ? '+' : ''}{gainLoss.toFixed(8)} BTC
-                  </span>
-                  <span className="gain-loss-percent">
-                    ({gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(2)}%)
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* No data state */}
-            {!hasPurchasePrice && !hasCurrentPrice && (
-              <div className="ordinal-card-no-data">
-                No price data available
-              </div>
-            )}
-          </>
+          <div className="price-value-unknown">Value unknown</div>
         )}
       </div>
     </div>

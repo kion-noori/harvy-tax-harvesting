@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import OrdinalPriceCard from './OrdinalPriceCard';
 import TaxReportSummary from './TaxReportSummary';
+import SellModal from './SellModal';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
@@ -12,23 +13,83 @@ const isTaproot = (s) => {
   return /^bc1p[0-9a-z]{58,86}$/i.test(trimmed);
 };
 
-export default function OrdinalList({ btcAddress: connectedAddress }) {
+export default function OrdinalList({ btcAddress: connectedAddress, walletType }) {
   const [address, setAddress] = useState(connectedAddress || '');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
-  const [displayCount, setDisplayCount] = useState(12); // Start with 12 items
+  const [displayCount, setDisplayCount] = useState(24); // Start with 24 items
   const [excludeBrc20, setExcludeBrc20] = useState(true); // Filter BRC-20 by default
   const [totalInscriptions, setTotalInscriptions] = useState(0);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
-  const ITEMS_PER_PAGE = 12;
-  const API_PAGE_SIZE = 60;
+  const ITEMS_PER_PAGE = 24;
 
   // Track activity and value data for tax reporting
   const [activityData, setActivityData] = useState({});
   const [valueData, setValueData] = useState({});
   const [showTaxReport, setShowTaxReport] = useState(false);
+
+  // Collection grouping state
+  const [collapsedCollections, setCollapsedCollections] = useState({});
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  // Sell modal state - now handles multiple ordinals
+  const [showSellModal, setShowSellModal] = useState(false);
+
+  // Handle ordinal selection toggle
+  const handleSelectOrdinal = (inscriptionId) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(inscriptionId)) {
+        newSet.delete(inscriptionId);
+      } else {
+        newSet.add(inscriptionId);
+      }
+      return newSet;
+    });
+  };
+
+  // Clear all selections
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  // Open sell modal with selected ordinals
+  const handleSellSelected = () => {
+    if (selectedIds.size > 0) {
+      setShowSellModal(true);
+    }
+  };
+
+  // Handle modal close
+  const handleCloseModal = () => {
+    setShowSellModal(false);
+  };
+
+  // Handle successful sale - remove sold items from selection
+  const handleSaleComplete = (soldInscriptionIds) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      soldInscriptionIds.forEach(id => newSet.delete(id));
+      return newSet;
+    });
+    setShowSellModal(false);
+  };
+
+  // Get selected ordinal items with their data
+  const getSelectedOrdinals = () => {
+    return items
+      .filter(item => selectedIds.has(item.id))
+      .map(item => ({
+        inscription: item,
+        activity: activityData[item.id] || null,
+        value: valueData[item.id] || null,
+        currentPrice: valueData[item.id]?.currentPrice || valueData[item.id]?.floorPrice || null,
+      }));
+  };
 
   // Keep in sync with wallet connection (no auto-load from storage)
   useEffect(() => {
@@ -55,6 +116,7 @@ export default function OrdinalList({ btcAddress: connectedAddress }) {
     if (!append) {
       setItems([]); // Clear previous results only on fresh load
       setCurrentOffset(0);
+      setSelectedIds(new Set()); // Clear selections on new load
     }
 
     try {
@@ -91,28 +153,23 @@ export default function OrdinalList({ btcAddress: connectedAddress }) {
         console.warn('Unexpected response format:', data);
         setItems([]);
         setErr('Received invalid data format from server');
+        setLoading(false);
         return;
       }
 
-      // Update items - append if loading more, replace if fresh load
-      setItems(prev => append ? [...prev, ...itemsArray] : itemsArray);
+      // Update items - use functional setState to avoid dependency issues
+      setItems(prevItems => append ? [...prevItems, ...itemsArray] : itemsArray);
       setTotalInscriptions(data.total || 0);
-      setCurrentOffset(offset + itemsArray.length);
-      setHasMore(offset + API_PAGE_SIZE < (data.total || 0));
+      const newOffset = offset + itemsArray.length;
+      setCurrentOffset(newOffset);
+      const more = newOffset < (data.total || 0);
+      setHasMore(more);
 
       if (!append) {
         setDisplayCount(ITEMS_PER_PAGE); // Reset to first page on fresh load
       }
 
-      // Show helpful message if no results
-      if (itemsArray.length === 0 && !append) {
-        console.log('No ordinals found for address:', a);
-      } else {
-        console.log(`✅ Loaded ${itemsArray.length} ordinals (total: ${data.total || itemsArray.length})`);
-        if (excludeBrc20 && itemsArray.length === 0) {
-          console.log('ℹ️ No image/video ordinals found in this batch. Try loading more pages.');
-        }
-      }
+      setLoading(false);
     } catch (e) {
       console.error('Ordinals fetch error:', e);
 
@@ -125,7 +182,6 @@ export default function OrdinalList({ btcAddress: connectedAddress }) {
         setErr(e.message || 'Failed to fetch ordinals');
       }
       if (!append) setItems([]);
-    } finally {
       setLoading(false);
     }
   }, [address, excludeBrc20]);
@@ -135,44 +191,115 @@ export default function OrdinalList({ btcAddress: connectedAddress }) {
     if (isTaproot(address)) load();
   }, [address, excludeBrc20, load]);
 
+  // Infinite scroll: Load more when user scrolls near bottom
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrolledToBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 500;
+      const hasMoreToDisplay = items.length > displayCount;
+      const needsMoreData = hasMore && currentOffset < totalInscriptions;
+
+      if (scrolledToBottom && !loading) {
+        // Case 1: We have items loaded but not displayed yet - just increase display count
+        if (hasMoreToDisplay) {
+          setDisplayCount(prev => Math.min(prev + ITEMS_PER_PAGE, items.length));
+        }
+        // Case 2: We've displayed everything but need to fetch more from API
+        else if (needsMoreData) {
+          setDisplayCount(prev => prev + ITEMS_PER_PAGE);
+          load(currentOffset, true);
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [loading, hasMore, currentOffset, load, items.length, displayCount, totalInscriptions]);
+
+  // Group ordinals by collection using Magic Eden data
+  const groupedByCollection = React.useMemo(() => {
+    const groups = {};
+    const itemsToDisplay = items.slice(0, displayCount);
+
+    itemsToDisplay.forEach(item => {
+      const valueInfo = valueData[item.id];
+      const collectionName = valueInfo?.collectionName || 'Uncategorized';
+      const collectionSymbol = valueInfo?.collectionSymbol || 'uncategorized';
+
+      if (!groups[collectionSymbol]) {
+        groups[collectionSymbol] = {
+          name: collectionName,
+          symbol: collectionSymbol,
+          items: []
+        };
+      }
+
+      groups[collectionSymbol].items.push(item);
+    });
+
+    // Sort collections: named collections first, then uncategorized
+    const sortedGroups = Object.values(groups).sort((a, b) => {
+      if (a.symbol === 'uncategorized') return 1;
+      if (b.symbol === 'uncategorized') return -1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return sortedGroups;
+  }, [items, displayCount, valueData]);
+
+  // Show message if no wallet connected
+  if (!address || !isTaproot(address)) {
+    return (
+      <div style={{
+        maxWidth: '600px',
+        margin: '80px auto',
+        padding: '40px',
+        textAlign: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: '16px',
+        border: '1px solid rgba(255, 255, 255, 0.1)'
+      }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔌</div>
+        <h2 style={{ color: '#fff', marginBottom: '12px', fontSize: '24px' }}>No Wallet Connected</h2>
+        <p style={{ color: '#aaa', fontSize: '16px', lineHeight: '1.6' }}>
+          Connect your Xverse wallet using the button in the top right to view your Ordinals portfolio.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ maxWidth: 880 }}>
-      <form
-        onSubmit={(e) => { e.preventDefault(); load(); }}
-        style={{ display: 'flex', gap: 8, marginBottom: 12 }}
-      >
-        <input
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          placeholder="bc1p… (owner address)"
-          style={{ flex: 1, padding: 10, borderRadius: 8 }}
-        />
-        <button
-          type="submit"
-          style={{
-            padding: '12px 24px',
-            borderRadius: 8,
-            background: 'linear-gradient(135deg, #F7931A 0%, #FF6B35 100%)',
-            border: 'none',
-            color: 'white',
-            fontSize: '14px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(247, 147, 26, 0.3)',
-            transition: 'transform 0.2s, box-shadow 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(247, 147, 26, 0.4)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(247, 147, 26, 0.3)';
-          }}
-        >
-          Load Ordinals
-        </button>
-      </form>
+    <div style={{ maxWidth: '100%', padding: '0 20px' }}>
+      {/* Selection info bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          marginBottom: 16,
+          padding: '12px 16px',
+          background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(22, 163, 74, 0.05))',
+          border: '1px solid rgba(34, 197, 94, 0.3)',
+          borderRadius: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <span style={{ color: '#22c55e', fontWeight: 600 }}>
+            {selectedIds.size} ordinal{selectedIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <button
+            onClick={handleClearSelection}
+            style={{
+              background: 'transparent',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              color: '#aaa',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '13px'
+            }}
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
 
       {/* BRC-20 Filter Toggle */}
       <div style={{ marginBottom: 16 }}>
@@ -186,15 +313,66 @@ export default function OrdinalList({ btcAddress: connectedAddress }) {
         </label>
       </div>
 
-      {loading && (
+      {/* Selection hint */}
+      {!loading && items.length > 0 && selectedIds.size === 0 && (
         <div style={{
-          padding: '20px',
+          marginBottom: 16,
+          padding: '12px 16px',
+          background: 'rgba(247, 147, 26, 0.1)',
+          border: '1px solid rgba(247, 147, 26, 0.2)',
+          borderRadius: '8px',
+          color: '#F7931A',
+          fontSize: '14px',
+          textAlign: 'center'
+        }}>
+          Click on ordinals to select them for selling
+        </div>
+      )}
+
+      {loading && items.length === 0 && (
+        <div style={{
+          padding: '40px 20px',
           textAlign: 'center',
           color: '#aaa',
           fontSize: '14px'
         }}>
-          <div style={{ marginBottom: '10px' }}>⏳ Loading ordinals...</div>
-          <div style={{ fontSize: '12px', opacity: 0.7 }}>This may take a few moments</div>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            border: '4px solid rgba(247, 147, 26, 0.2)',
+            borderTopColor: '#F7931A',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }}></div>
+          <div style={{ marginBottom: '10px', fontSize: '16px' }}>Loading your ordinals...</div>
+          <div style={{ fontSize: '12px', opacity: 0.7 }}>
+            This may take a few moments
+          </div>
+        </div>
+      )}
+
+      {/* Loading more indicator (shows at bottom when scrolling) */}
+      {loading && items.length > 0 && (
+        <div style={{
+          padding: '20px',
+          textAlign: 'center',
+          color: '#F7931A',
+          fontSize: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '12px'
+        }}>
+          <div style={{
+            width: '20px',
+            height: '20px',
+            border: '3px solid rgba(247, 147, 26, 0.2)',
+            borderTopColor: '#F7931A',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite'
+          }}></div>
+          <span>Loading more...</span>
         </div>
       )}
 
@@ -282,131 +460,135 @@ export default function OrdinalList({ btcAddress: connectedAddress }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-        {items.slice(0, displayCount).map((it) => (
-          <OrdinalPriceCard
-            key={it.id}
-            inscription={it}
-            onActivityData={(data) => {
-              setActivityData(prev => ({ ...prev, [it.id]: data }));
-            }}
-            onValueData={(data) => {
-              setValueData(prev => ({ ...prev, [it.id]: data }));
-            }}
-          />
-        ))}
-      </div>
+      {/* Render collections as collapsible folders */}
+      {groupedByCollection.map((collection) => {
+        const isCollapsed = collapsedCollections[collection.symbol];
+        const itemCount = collection.items.length;
 
-      {/* Load More Display button */}
-      {!loading && items.length > displayCount && (
-        <div style={{ textAlign: 'center', marginTop: '24px' }}>
-          <button
-            onClick={() => setDisplayCount(prev => prev + ITEMS_PER_PAGE)}
-            style={{
-              padding: '12px 32px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, #F7931A 0%, #FF6B35 100%)',
-              border: 'none',
-              color: 'white',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(247, 147, 26, 0.3)',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(247, 147, 26, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(247, 147, 26, 0.3)';
-            }}
-          >
-            Show More ({items.length - displayCount} loaded)
-          </button>
-        </div>
-      )}
+        return (
+          <div key={collection.symbol} style={{ marginBottom: '32px' }}>
+            {/* Collection Header */}
+            <div
+              onClick={() => setCollapsedCollections(prev => ({
+                ...prev,
+                [collection.symbol]: !prev[collection.symbol]
+              }))}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '16px 20px',
+                background: 'linear-gradient(135deg, rgba(247, 147, 26, 0.1) 0%, rgba(255, 107, 53, 0.1) 100%)',
+                borderRadius: '12px',
+                border: '1px solid rgba(247, 147, 26, 0.2)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                marginBottom: isCollapsed ? '0' : '16px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(247, 147, 26, 0.15) 0%, rgba(255, 107, 53, 0.15) 100%)';
+                e.currentTarget.style.borderColor = 'rgba(247, 147, 26, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(247, 147, 26, 0.1) 0%, rgba(255, 107, 53, 0.1) 100%)';
+                e.currentTarget.style.borderColor = 'rgba(247, 147, 26, 0.2)';
+              }}
+            >
+              <span style={{ fontSize: '18px', transition: 'transform 0.2s', display: 'inline-block', transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>
+                ▶
+              </span>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: 0, color: '#fff', fontSize: '18px', fontWeight: '600' }}>
+                  {collection.name}
+                </h3>
+              </div>
+              <div style={{
+                padding: '4px 12px',
+                background: 'rgba(247, 147, 26, 0.2)',
+                borderRadius: '12px',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#F7931A'
+              }}>
+                {itemCount} {itemCount === 1 ? 'item' : 'items'}
+              </div>
+            </div>
 
-      {/* Load More from API button */}
-      {!loading && hasMore && items.length > 0 && displayCount >= items.length && (
-        <div style={{ textAlign: 'center', marginTop: '16px' }}>
-          <button
-            onClick={() => load(currentOffset, true)}
-            style={{
-              padding: '12px 32px',
-              borderRadius: '8px',
-              background: 'rgba(247, 147, 26, 0.15)',
-              border: '2px solid rgba(247, 147, 26, 0.4)',
-              color: '#F7931A',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(247, 147, 26, 0.25)';
-              e.currentTarget.style.borderColor = '#F7931A';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(247, 147, 26, 0.15)';
-              e.currentTarget.style.borderColor = 'rgba(247, 147, 26, 0.4)';
-            }}
-          >
-            Fetch Next Page from API
-          </button>
-        </div>
-      )}
+            {/* Collection Items Grid */}
+            {!isCollapsed && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+                {collection.items.map((it) => (
+                  <OrdinalPriceCard
+                    key={it.id}
+                    inscription={it}
+                    isSelected={selectedIds.has(it.id)}
+                    onSelect={handleSelectOrdinal}
+                    onActivityData={(data) => {
+                      setActivityData(prev => ({ ...prev, [it.id]: data }));
+                    }}
+                    onValueData={(data) => {
+                      setValueData(prev => ({ ...prev, [it.id]: data }));
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
 
-      {/* No results message for filtered searches */}
-      {!loading && items.length === 0 && excludeBrc20 && hasMore && (
+      {/* End of results message */}
+      {!loading && items.length > 0 && !hasMore && displayCount >= items.length && (
         <div style={{
           textAlign: 'center',
-          marginTop: '16px',
-          padding: '16px',
-          background: 'rgba(255, 255, 255, 0.05)',
-          borderRadius: '8px',
-          color: '#aaa'
+          marginTop: '32px',
+          padding: '20px',
+          color: '#888',
+          fontSize: '14px',
+          background: 'rgba(255, 255, 255, 0.03)',
+          borderRadius: '12px',
+          border: '1px solid rgba(255, 255, 255, 0.1)'
         }}>
-          <div style={{ marginBottom: '8px' }}>No image/video ordinals found in the first page.</div>
-          <div style={{ fontSize: '13px', opacity: 0.8 }}>
-            Your actual ordinals might be in later pages. Try fetching more:
+          <div style={{ marginBottom: '8px', fontSize: '16px' }}>✓ All ordinals loaded</div>
+          <div>
+            Showing all {totalInscriptions} inscriptions
           </div>
-          <button
-            onClick={() => load(currentOffset, true)}
-            style={{
-              marginTop: '12px',
-              padding: '12px 28px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, #F7931A 0%, #FF6B35 100%)',
-              border: 'none',
-              color: 'white',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(247, 147, 26, 0.3)',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(247, 147, 26, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(247, 147, 26, 0.3)';
-            }}
-          >
-            Fetch Next Page
+        </div>
+      )}
+
+      {/* Scroll for more hint */}
+      {!loading && items.length > 0 && (items.length > displayCount || hasMore) && (
+        <div style={{
+          textAlign: 'center',
+          marginTop: '24px',
+          padding: '16px',
+          color: '#888',
+          fontSize: '13px',
+          fontStyle: 'italic'
+        }}>
+          Scroll down to load more... (showing {displayCount} of {totalInscriptions})
+        </div>
+      )}
+
+      {/* Floating Sell Selected Button */}
+      {selectedIds.size > 0 && (
+        <div className="sell-selected-container">
+          <button className="sell-selected-btn" onClick={handleSellSelected}>
+            <span>Sell Selected</span>
+            <span className="sell-selected-count">{selectedIds.size}</span>
           </button>
         </div>
       )}
 
-      {/* Show total count */}
-      {!loading && items.length > 0 && (
-        <div style={{ textAlign: 'center', marginTop: '16px', color: '#888', fontSize: '14px' }}>
-          Showing {Math.min(displayCount, items.length)} of {items.length} loaded
-          {totalInscriptions > 0 && ` (${totalInscriptions} total inscriptions)`}
-        </div>
+      {/* Sell Modal - now with multiple ordinals */}
+      {showSellModal && (
+        <SellModal
+          selectedOrdinals={getSelectedOrdinals()}
+          btcAddress={address}
+          walletType={walletType}
+          onClose={handleCloseModal}
+          onSaleComplete={handleSaleComplete}
+        />
       )}
     </div>
   );

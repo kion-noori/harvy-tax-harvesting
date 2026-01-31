@@ -12,11 +12,13 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 export default function App() {
   const [activeTab, setActiveTab] = useState('home'); // 'home' | 'ordinals' | 'terms' | 'privacy'
   const [btcAddress, setBtcAddress] = useState('');
+  const [connectedWalletType, setConnectedWalletType] = useState(''); // 'xverse' | 'unisat' | 'leather'
 
   // Simple handler - just update React state
   // No localStorage persistence for security (wallet handles persistence)
-  const handleBitcoinConnect = (address) => {
+  const handleBitcoinConnect = (address, walletType) => {
     setBtcAddress(address || '');
+    setConnectedWalletType(walletType || '');
   };
 
   // Handle navigation
@@ -29,7 +31,7 @@ export default function App() {
     <div className="app">
       {/* Header */}
       <header className="header">
-        <div className="logo">
+        <div className="logo" onClick={() => setActiveTab('home')} style={{ cursor: 'pointer' }}>
           <h1 className="gradient-text">Harvy</h1>
         </div>
 
@@ -62,14 +64,14 @@ export default function App() {
             <div className="hero-content">
               <h1 className="hero-title">Turn Ordinal Losses Into Tax Savings</h1>
               <p className="hero-subtitle">
-                Identify unrealized losses in your Bitcoin Ordinals portfolio before year-end 2025.
-                Harvest losses to offset capital gains and reduce your tax bill.
+                Instantly sell your underwater Bitcoin Ordinals to Harvy before year-end 2025.
+                Realize losses to offset capital gains while keeping most of the tax savings.
               </p>
 
               {!btcAddress ? (
                 <div className="cta-box">
-                  <p className="cta-text">Connect your Xverse wallet to get started →</p>
-                  <p className="cta-subtext">View your portfolio in seconds. No signup required.</p>
+                  <p className="cta-text">Connect your Bitcoin wallet to get started →</p>
+                  <p className="cta-subtext">Supports Xverse, Unisat, and Leather. No signup required.</p>
                 </div>
               ) : (
                 <div className="cta-box connected">
@@ -91,82 +93,58 @@ export default function App() {
                 <div className="step-card">
                   <div className="step-number">1</div>
                   <h3>Connect Wallet</h3>
-                  <p>Connect your Xverse Bitcoin wallet securely. We only read data - never request transaction permissions.</p>
+                  <p>Connect your Bitcoin wallet (Xverse, Unisat, or Leather) to view your Ordinals.</p>
                 </div>
                 <div className="step-card">
                   <div className="step-number">2</div>
                   <h3>View Portfolio</h3>
-                  <p>See all your Ordinals with purchase prices, current values, and unrealized gains/losses.</p>
+                  <p>See your Ordinals with purchase prices, current values, and unrealized losses.</p>
                 </div>
                 <div className="step-card">
                   <div className="step-number">3</div>
-                  <h3>Identify Losses</h3>
-                  <p>Instantly spot which Ordinals have unrealized losses that can offset your 2025 capital gains.</p>
-                </div>
-                <div className="step-card">
-                  <div className="step-number">4</div>
-                  <h3>Harvest & Save</h3>
-                  <p>Generate tax reports and realize losses before December 31st to maximize tax savings.</p>
+                  <h3>Sell to Harvy</h3>
+                  <p>Instantly sell your losing Ordinals to Harvy and harvest tax losses.</p>
                 </div>
               </div>
             </div>
 
             {/* Features */}
             <div className="features-section">
-              <h2 className="section-heading">Why Use Harvy?</h2>
+              <h2 className="section-heading">Why Harvy?</h2>
               <div className="features-grid">
                 <div className="feature-card">
-                  <div className="feature-icon">📊</div>
-                  <h3>Real-Time Pricing</h3>
-                  <p>Live data from Magic Eden shows current market values vs. your purchase prices.</p>
+                  <div className="feature-icon">⚡</div>
+                  <h3>Instant Liquidity</h3>
+                  <p>No need to find buyers or wait for sales. Sell your losing Ordinals instantly to Harvy.</p>
                 </div>
                 <div className="feature-card">
                   <div className="feature-icon">💰</div>
-                  <h3>Maximize Savings</h3>
-                  <p>Find hidden losses across your entire Ordinals portfolio in one view.</p>
+                  <h3>Keep the Tax Savings</h3>
+                  <p>Realize losses to offset capital gains. Our service fee is a small percentage of your tax savings.</p>
                 </div>
                 <div className="feature-card">
                   <div className="feature-icon">🔒</div>
-                  <h3>Secure & Private</h3>
-                  <p>No account required. We never ask for transaction permissions or private keys.</p>
-                </div>
-                <div className="feature-card">
-                  <div className="feature-icon">⚡</div>
-                  <h3>Built for 2025</h3>
-                  <p>Purpose-built for year-end tax planning. Don't leave money on the table.</p>
-                </div>
-                <div className="feature-card">
-                  <div className="feature-icon">📄</div>
-                  <h3>Tax Reports</h3>
-                  <p>Export formatted reports for your accountant or tax software.</p>
-                </div>
-                <div className="feature-card">
-                  <div className="feature-icon">🎯</div>
-                  <h3>Simple Pricing</h3>
-                  <p>Pay only when you harvest. Fees scale with your tax savings.</p>
+                  <h3>Secure & Trustless</h3>
+                  <p>Atomic swaps via PSBT. Your wallet stays in your control. No custody, no risk.</p>
                 </div>
               </div>
             </div>
 
             {/* FAQ Teaser */}
             <div className="faq-teaser">
-              <h2 className="section-heading">Common Questions</h2>
+              <h2 className="section-heading">FAQ</h2>
               <div className="faq-grid">
                 <div className="faq-item">
-                  <h4>What is tax loss harvesting?</h4>
-                  <p>It's selling assets at a loss to offset capital gains and reduce your tax bill. If your Ordinals dropped in value, you can turn that into tax savings.</p>
-                </div>
-                <div className="faq-item">
-                  <h4>When should I harvest losses?</h4>
-                  <p>Before December 31, 2025. Losses must be realized in the same tax year as the gains you want to offset.</p>
+                  <h4>How does Harvy make money?</h4>
+                  <p>We charge a small service fee (5-15%) based on your tax savings. You keep the majority of the benefit.</p>
                 </div>
                 <div className="faq-item">
                   <h4>Is this safe?</h4>
-                  <p>Yes. We only request read permissions from your wallet. We never ask for transaction signing or access to your private keys.</p>
+                  <p>Yes. We use atomic swaps (PSBTs). Your private keys never leave your wallet. No custody required.</p>
                 </div>
                 <div className="faq-item">
-                  <h4>Do I need an account?</h4>
-                  <p>No. Connect your wallet and start viewing your portfolio immediately. No email, no signup.</p>
+                  <h4>What wallets are supported?</h4>
+                  <p>Currently supporting Xverse, Unisat, and Leather wallets on Bitcoin testnet and mainnet.</p>
                 </div>
               </div>
             </div>
@@ -190,7 +168,7 @@ export default function App() {
         {activeTab === 'ordinals' && (
           <section>
             <h2 className="section-title">Bitcoin Ordinals</h2>
-            <OrdinalList btcAddress={btcAddress} />
+            <OrdinalList btcAddress={btcAddress} walletType={connectedWalletType} />
           </section>
         )}
 

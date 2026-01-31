@@ -935,6 +935,7 @@ body > * {
 }
 
 /* How It Works Section */
+/* BACKUP: padding: 4rem 0; transition: none */
 .how-it-works {
   padding: 4rem 0;
   border-bottom: 1px solid rgba(247, 147, 26, 0.1);
@@ -949,8 +950,10 @@ body > * {
   margin: 0 auto;
 }
 
+/* BACKUP: no transform, transition: background 0.3s; */
 .step-card {
   background: linear-gradient(135deg, rgba(247, 147, 26, 0.05) 0%, rgba(255, 107, 53, 0.03) 100%);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid rgba(247, 147, 26, 0.15);
   border-radius: 16px;
   padding: 2rem;
@@ -976,6 +979,7 @@ body > * {
   transform: scaleX(1);
 }
 
+/* BACKUP: no transform on hover */
 .step-card:hover {
   background: linear-gradient(135deg, rgba(247, 147, 26, 0.1) 0%, rgba(255, 107, 53, 0.08) 100%);
   border-color: rgba(247, 147, 26, 0.3);
@@ -1577,6 +1581,7 @@ body > * {
   mask-composite: exclude;
   opacity: 0;
   transition: opacity 0.3s ease;
+  pointer-events: none;
 }
 
 .ordinal-price-card:hover {
@@ -1598,6 +1603,45 @@ body > * {
   letter-spacing: 0.5px;
 }
 
+/* Media Container - uniform sizing for all ordinals */
+/* BACKUP (before subtle improvements):
+.ordinal-media-container {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+*/
+.ordinal-media-container {
+  width: 100%;
+  height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.3) 0%, rgba(26, 26, 46, 0.2) 100%);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.ordinal-media-container img,
+.ordinal-media-container video,
+.ordinal-media-container iframe {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 0.3s ease;
+}
+
+.ordinal-price-card:hover .ordinal-media-container img,
+.ordinal-price-card:hover .ordinal-media-container video {
+  transform: scale(1.02);
+}
+
+.ordinal-media-container model-viewer {
+  width: 100%;
+  height: 100%;
+}
+
 /* Price Information Section */
 .ordinal-card-prices {
   margin-top: 16px;
@@ -1606,6 +1650,8 @@ body > * {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 /* Loading State */
@@ -1628,8 +1674,14 @@ body > * {
   animation: spin 0.8s linear infinite;
 }
 
+/* BACKUP: basic rotation */
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Price Row */
@@ -2404,4 +2456,259 @@ body > * {
   .legal-section h3 {
     font-size: 1.1rem;
   }
+}
+
+/* ==================== Sell to Harvy Button ==================== */
+.sell-to-harvy-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #F7931A 0%, #FF6B35 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(247, 147, 26, 0.3);
+  text-transform: none;
+  letter-spacing: 0.3px;
+}
+
+.sell-to-harvy-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(247, 147, 26, 0.5);
+  background: linear-gradient(135deg, #FF6B35 0%, #F7931A 100%);
+}
+
+.sell-to-harvy-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(247, 147, 26, 0.4);
+}
+
+/* ==================== Purchase Price Input Styles ==================== */
+
+.price-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(247, 147, 26, 0.3);
+  border-radius: 6px;
+  padding: 4px 12px;
+  transition: all 0.2s ease;
+  cursor: text;
+  min-height: 36px;
+}
+
+.price-input-wrapper:focus-within {
+  border-color: #F7931A;
+  box-shadow: 0 0 0 2px rgba(247, 147, 26, 0.2);
+}
+
+.price-input {
+  background: transparent;
+  border: none;
+  color: #F7931A;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+  width: 100%;
+  flex: 1;
+  padding: 8px 4px;
+  outline: none;
+  cursor: text;
+}
+
+.price-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.price-input::-webkit-inner-spin-button,
+.price-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.price-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.price-input-suffix {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+}
+
+.price-source {
+  font-size: 9px;
+  color: rgba(34, 197, 94, 0.8);
+  font-weight: 400;
+  text-transform: none;
+}
+
+/* Inline loading state for current value */
+.price-value-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.mini-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(247, 147, 26, 0.2);
+  border-top-color: #F7931A;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.price-value-unknown {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+
+/* ==================== Gallery Card Selection Styles ==================== */
+
+.ordinal-price-card {
+  cursor: pointer;
+  user-select: none;
+}
+
+.ordinal-price-card.selected {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3), 0 8px 24px rgba(34, 197, 94, 0.2);
+}
+
+.ordinal-price-card.selected::before {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(22, 163, 74, 0.2), transparent);
+  opacity: 1;
+}
+
+.selection-indicator {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.4);
+  animation: popIn 0.2s ease-out;
+}
+
+@keyframes popIn {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.selection-check {
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* Simplified footer for gallery view */
+.ordinal-card-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(247, 147, 26, 0.15);
+  text-align: center;
+}
+
+.price-value-simple {
+  font-size: 13px;
+  color: #F7931A;
+  font-weight: 500;
+  font-family: 'Courier New', monospace;
+}
+
+/* ==================== Sell Selected Button (Floating) ==================== */
+
+.sell-selected-container {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateX(-50%) translateY(100px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+.sell-selected-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 32px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border: none;
+  border-radius: 50px;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.4), 0 0 40px rgba(34, 197, 94, 0.2);
+  transition: all 0.3s ease;
+}
+
+.sell-selected-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 30px rgba(34, 197, 94, 0.5), 0 0 60px rgba(34, 197, 94, 0.3);
+}
+
+.sell-selected-btn:active {
+  transform: scale(0.98);
+}
+
+.sell-selected-count {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+}
+
+.clear-selection-btn {
+  margin-left: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50px;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clear-selection-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
 }

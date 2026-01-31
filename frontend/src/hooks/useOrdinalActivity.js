@@ -1,27 +1,7 @@
 import { useState, useEffect } from 'react';
+import { enqueueRequest } from '../utils/apiQueue';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-
-// Global queue to prevent too many simultaneous requests to Magic Eden API
-let requestQueue = [];
-let activeRequests = 0;
-const MAX_CONCURRENT = 3; // Only 3 concurrent requests at a time
-const DELAY_BETWEEN_REQUESTS = 500; // 500ms delay between batches
-
-function processQueue() {
-  if (activeRequests >= MAX_CONCURRENT || requestQueue.length === 0) {
-    return;
-  }
-
-  const nextRequest = requestQueue.shift();
-  if (nextRequest) {
-    activeRequests++;
-    nextRequest().finally(() => {
-      activeRequests--;
-      setTimeout(processQueue, DELAY_BETWEEN_REQUESTS);
-    });
-  }
-}
 
 /**
  * Hook to fetch activity/transaction history for an ordinal inscription
@@ -77,8 +57,7 @@ export function useOrdinalActivity(inscriptionId) {
     }
 
     // Add to queue instead of fetching immediately
-    requestQueue.push(fetchActivity);
-    processQueue();
+    enqueueRequest(fetchActivity);
 
     return () => {
       cancelled = true;

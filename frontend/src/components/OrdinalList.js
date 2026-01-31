@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import OrdinalPriceCard from './OrdinalPriceCard';
-import TaxReportSummary from './TaxReportSummary';
 import SellModal from './SellModal';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
@@ -25,10 +24,9 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType }
   const [hasMore, setHasMore] = useState(true);
   const ITEMS_PER_PAGE = 24;
 
-  // Track activity and value data for tax reporting
+  // Track activity and value data for tax calculations
   const [activityData, setActivityData] = useState({});
   const [valueData, setValueData] = useState({});
-  const [showTaxReport, setShowTaxReport] = useState(false);
 
   // Collection grouping state
   const [collapsedCollections, setCollapsedCollections] = useState({});
@@ -417,60 +415,6 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType }
           <div style={{ fontSize: '14px', opacity: 0.8 }}>
             This address doesn't have any Bitcoin Ordinals yet.
           </div>
-        </div>
-      )}
-
-      {/* Tax Report Summary - Show when items are loaded */}
-      {!loading && items.length > 0 && showTaxReport && (
-        <TaxReportSummary
-          ordinals={items}
-          activityData={activityData}
-          valueData={valueData}
-        />
-      )}
-
-      {/* Tax Report Toggle Button */}
-      {!loading && items.length > 0 && (
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <button
-            onClick={() => setShowTaxReport(!showTaxReport)}
-            style={{
-              padding: '14px 32px',
-              borderRadius: '8px',
-              background: showTaxReport
-                ? 'rgba(247, 147, 26, 0.15)'
-                : 'linear-gradient(135deg, #F7931A 0%, #FF6B35 100%)',
-              border: showTaxReport ? '2px solid rgba(247, 147, 26, 0.4)' : 'none',
-              color: showTaxReport ? '#F7931A' : 'white',
-              fontSize: '15px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: showTaxReport
-                ? 'none'
-                : '0 4px 12px rgba(247, 147, 26, 0.3)',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (!showTaxReport) {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(247, 147, 26, 0.4)';
-              } else {
-                e.currentTarget.style.background = 'rgba(247, 147, 26, 0.25)';
-                e.currentTarget.style.borderColor = '#F7931A';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!showTaxReport) {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(247, 147, 26, 0.3)';
-              } else {
-                e.currentTarget.style.background = 'rgba(247, 147, 26, 0.15)';
-                e.currentTarget.style.borderColor = 'rgba(247, 147, 26, 0.4)';
-              }
-            }}
-          >
-            {showTaxReport ? '📊 Hide Tax Report' : '📊 View Tax Loss Report'}
-          </button>
         </div>
       )}
 

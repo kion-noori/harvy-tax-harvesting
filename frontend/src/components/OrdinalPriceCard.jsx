@@ -1,33 +1,12 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import OrdinalMedia from './OrdinalMedia';
-import { useOrdinalActivity } from '../hooks/useOrdinalActivity';
-import { useOrdinalValue } from '../hooks/useOrdinalValue';
 
 /**
  * Card component that displays an ordinal in a gallery view
- * Shows media, inscription number, and current value estimate
+ * Shows media and inscription number
  * Click to select for bulk selling
  */
-export default function OrdinalPriceCard({ inscription, onActivityData, onValueData, isSelected, onSelect }) {
-  const { activity, loading: loadingActivity } = useOrdinalActivity(inscription.id);
-  const { value, loading: loadingValue } = useOrdinalValue(inscription.id);
-
-  // Notify parent component when data is loaded (for tax reporting)
-  useEffect(() => {
-    if (activity && !loadingActivity && typeof onActivityData === 'function') {
-      onActivityData(activity);
-    }
-  }, [activity, loadingActivity, onActivityData]);
-
-  useEffect(() => {
-    if (value && !loadingValue && typeof onValueData === 'function') {
-      onValueData(value);
-    }
-  }, [value, loadingValue, onValueData]);
-
-  // Use listed price if available, otherwise use collection floor price as estimate
-  const currentPrice = value?.currentPrice || value?.floorPrice;
-  const hasCurrentPrice = currentPrice !== null && currentPrice !== undefined;
+export default function OrdinalPriceCard({ inscription, isSelected, onSelect }) {
 
   // Handle card click for selection
   const handleClick = () => {
@@ -60,21 +39,11 @@ export default function OrdinalPriceCard({ inscription, onActivityData, onValueD
         <OrdinalMedia id={inscription.id} contentType={inscription.content_type} />
       </div>
 
-      {/* Simplified price info - just current value */}
+      {/* Click to select hint */}
       <div className="ordinal-card-footer">
-        {loadingValue ? (
-          <div className="price-value-loading">
-            <span className="mini-spinner"></span>
-            <span>Loading...</span>
-          </div>
-        ) : hasCurrentPrice ? (
-          <div className="price-value-simple">
-            {value?.isListed ? 'Listed: ' : 'Est: '}
-            {currentPrice.toFixed(6)} BTC
-          </div>
-        ) : (
-          <div className="price-value-unknown">Value unknown</div>
-        )}
+        <div className="card-select-hint">
+          {isSelected ? 'Selected' : 'Click to select'}
+        </div>
       </div>
     </div>
   );

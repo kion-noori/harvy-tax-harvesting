@@ -2551,28 +2551,21 @@ body > * {
   text-transform: none;
 }
 
-/* Inline loading state for current value */
-.price-value-loading {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* Card select hint */
+.card-select-hint {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  transition: color 0.2s ease;
 }
 
-.mini-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(247, 147, 26, 0.2);
-  border-top-color: #F7931A;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+.ordinal-price-card:hover .card-select-hint {
+  color: #F7931A;
 }
 
-.price-value-unknown {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-  font-style: italic;
+.ordinal-price-card.selected .card-select-hint {
+  color: #22c55e;
+  font-weight: 600;
 }
 
 /* ==================== Gallery Card Selection Styles ==================== */

@@ -24,13 +24,6 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType }
   const [hasMore, setHasMore] = useState(true);
   const ITEMS_PER_PAGE = 24;
 
-  // Track activity and value data for tax calculations
-  const [activityData, setActivityData] = useState({});
-  const [valueData, setValueData] = useState({});
-
-  // Collection grouping state
-  const [collapsedCollections, setCollapsedCollections] = useState({});
-
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState(new Set());
 
@@ -77,15 +70,12 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType }
     setShowSellModal(false);
   };
 
-  // Get selected ordinal items with their data
+  // Get selected ordinal items
   const getSelectedOrdinals = () => {
     return items
       .filter(item => selectedIds.has(item.id))
       .map(item => ({
         inscription: item,
-        activity: activityData[item.id] || null,
-        value: valueData[item.id] || null,
-        currentPrice: valueData[item.id]?.currentPrice || valueData[item.id]?.floorPrice || null,
       }));
   };
 
@@ -213,36 +203,10 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType }
     return () => window.removeEventListener('scroll', handleScroll);
   }, [loading, hasMore, currentOffset, load, items.length, displayCount, totalInscriptions]);
 
-  // Group ordinals by collection using Magic Eden data
-  const groupedByCollection = React.useMemo(() => {
-    const groups = {};
-    const itemsToDisplay = items.slice(0, displayCount);
-
-    itemsToDisplay.forEach(item => {
-      const valueInfo = valueData[item.id];
-      const collectionName = valueInfo?.collectionName || 'Uncategorized';
-      const collectionSymbol = valueInfo?.collectionSymbol || 'uncategorized';
-
-      if (!groups[collectionSymbol]) {
-        groups[collectionSymbol] = {
-          name: collectionName,
-          symbol: collectionSymbol,
-          items: []
-        };
-      }
-
-      groups[collectionSymbol].items.push(item);
-    });
-
-    // Sort collections: named collections first, then uncategorized
-    const sortedGroups = Object.values(groups).sort((a, b) => {
-      if (a.symbol === 'uncategorized') return 1;
-      if (b.symbol === 'uncategorized') return -1;
-      return a.name.localeCompare(b.name);
-    });
-
-    return sortedGroups;
-  }, [items, displayCount, valueData]);
+  // Get ordinals to display
+  const itemsToDisplay = React.useMemo(() => {
+    return items.slice(0, displayCount);
+  }, [items, displayCount]);
 
   // Show message if no wallet connected
   if (!address || !isTaproot(address)) {
@@ -418,82 +382,17 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType }
         </div>
       )}
 
-      {/* Render collections as collapsible folders */}
-      {groupedByCollection.map((collection) => {
-        const isCollapsed = collapsedCollections[collection.symbol];
-        const itemCount = collection.items.length;
-
-        return (
-          <div key={collection.symbol} style={{ marginBottom: '32px' }}>
-            {/* Collection Header */}
-            <div
-              onClick={() => setCollapsedCollections(prev => ({
-                ...prev,
-                [collection.symbol]: !prev[collection.symbol]
-              }))}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '16px 20px',
-                background: 'linear-gradient(135deg, rgba(247, 147, 26, 0.1) 0%, rgba(255, 107, 53, 0.1) 100%)',
-                borderRadius: '12px',
-                border: '1px solid rgba(247, 147, 26, 0.2)',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                marginBottom: isCollapsed ? '0' : '16px'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(247, 147, 26, 0.15) 0%, rgba(255, 107, 53, 0.15) 100%)';
-                e.currentTarget.style.borderColor = 'rgba(247, 147, 26, 0.3)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(247, 147, 26, 0.1) 0%, rgba(255, 107, 53, 0.1) 100%)';
-                e.currentTarget.style.borderColor = 'rgba(247, 147, 26, 0.2)';
-              }}
-            >
-              <span style={{ fontSize: '18px', transition: 'transform 0.2s', display: 'inline-block', transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>
-                ▶
-              </span>
-              <div style={{ flex: 1 }}>
-                <h3 style={{ margin: 0, color: '#fff', fontSize: '18px', fontWeight: '600' }}>
-                  {collection.name}
-                </h3>
-              </div>
-              <div style={{
-                padding: '4px 12px',
-                background: 'rgba(247, 147, 26, 0.2)',
-                borderRadius: '12px',
-                fontSize: '13px',
-                fontWeight: '600',
-                color: '#F7931A'
-              }}>
-                {itemCount} {itemCount === 1 ? 'item' : 'items'}
-              </div>
-            </div>
-
-            {/* Collection Items Grid */}
-            {!isCollapsed && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-                {collection.items.map((it) => (
-                  <OrdinalPriceCard
-                    key={it.id}
-                    inscription={it}
-                    isSelected={selectedIds.has(it.id)}
-                    onSelect={handleSelectOrdinal}
-                    onActivityData={(data) => {
-                      setActivityData(prev => ({ ...prev, [it.id]: data }));
-                    }}
-                    onValueData={(data) => {
-                      setValueData(prev => ({ ...prev, [it.id]: data }));
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {/* Render ordinals grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+        {itemsToDisplay.map((it) => (
+          <OrdinalPriceCard
+            key={it.id}
+            inscription={it}
+            isSelected={selectedIds.has(it.id)}
+            onSelect={handleSelectOrdinal}
+          />
+        ))}
+      </div>
 
       {/* End of results message */}
       {!loading && items.length > 0 && !hasMore && displayCount >= items.length && (

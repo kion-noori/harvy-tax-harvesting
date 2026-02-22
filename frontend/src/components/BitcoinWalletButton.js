@@ -82,9 +82,12 @@ function BitcoinWalletButton({ onAddressChange = () => {} }) {
 
         if (ordinalsAddressItem) {
           const addr = ordinalsAddressItem.address;
+          const pubKey = ordinalsAddressItem.publicKey || '';
+          console.log('Xverse ordinals address item:', JSON.stringify(ordinalsAddressItem));
+          console.log('Xverse ordinals publicKey:', pubKey);
           setBtcAddress(addr);
           setConnectedWallet('xverse');
-          if (typeof onAddressChange === 'function') onAddressChange(addr, 'xverse');
+          if (typeof onAddressChange === 'function') onAddressChange(addr, 'xverse', pubKey);
         }
       }
     } catch (error) {

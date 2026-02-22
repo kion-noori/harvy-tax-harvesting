@@ -12,7 +12,7 @@ const isTaproot = (s) => {
   return /^bc1p[0-9a-z]{58,86}$/i.test(trimmed);
 };
 
-export default function OrdinalList({ btcAddress: connectedAddress, walletType }) {
+export default function OrdinalList({ btcAddress: connectedAddress, walletType, btcPublicKey }) {
   const [address, setAddress] = useState(connectedAddress || '');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -443,6 +443,7 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType }
           selectedOrdinals={getSelectedOrdinals()}
           btcAddress={address}
           walletType={walletType}
+          btcPublicKey={btcPublicKey}
           onClose={handleCloseModal}
           onSaleComplete={handleSaleComplete}
         />

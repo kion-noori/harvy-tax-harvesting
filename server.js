@@ -181,6 +181,32 @@ app.get('/api/ordinals', strictLimiter, async (req, res) => {
       console.log(`Filtered ${json.results.length} inscriptions to ${results.length} (excluded ${json.results.length - results.length} BRC-20 tokens)`);
     }
 
+    // Cross-check against live UTXOs to filter out inscriptions that have been spent.
+    // The Hiro indexer can be slow to update, so an inscription may still appear
+    // in the API even after the UTXO has been spent on-chain.
+    try {
+      const mempoolAPI = process.env.MEMPOOL_API_URL || 'https://mempool.space/api';
+      const utxoResponse = await tryFetch(`${mempoolAPI}/address/${address}/utxo`);
+      const utxos = await utxoResponse.json();
+      const utxoSet = new Set(utxos.map(u => `${u.txid}:${u.vout}`));
+
+      const beforeCount = results.length;
+      results = results.filter((it) => {
+        // Inscription ID format: <txid>i<vout>
+        const parts = it.id.split('i');
+        if (parts.length !== 2) return true; // Keep if we can't parse
+        const utxoKey = `${parts[0]}:${parts[1]}`;
+        return utxoSet.has(utxoKey);
+      });
+
+      if (beforeCount !== results.length) {
+        console.log(`UTXO check: filtered ${beforeCount} → ${results.length} (removed ${beforeCount - results.length} spent inscriptions)`);
+      }
+    } catch (utxoErr) {
+      // If UTXO fetch fails, continue with unfiltered results (graceful degradation)
+      console.warn('UTXO cross-check failed, showing unfiltered results:', utxoErr.message);
+    }
+
     const items = results.map((it) => ({
       id: it.id,
       number: it.number,
@@ -783,6 +809,7 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
   const {
     ordinals,
     sellerAddress,
+    sellerPublicKey,
     btcPriceUSD,
     userTaxRate
   } = req.body;
@@ -790,6 +817,8 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
   console.log('📝 Creating BATCHED PSBT for:', {
     ordinalCount: ordinals?.length,
     sellerAddress: sellerAddress?.slice(0, 20) + '...',
+    sellerPublicKey: sellerPublicKey || '(empty/missing)',
+    sellerPublicKeyLength: sellerPublicKey?.length || 0,
     btcPriceUSD
   });
 
@@ -871,6 +900,7 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
     const psbtResult = await createBatchedOrdinalPurchasePSBT({
       ordinals,
       sellerAddress,
+      sellerPublicKey,
       totalOfferSats,
       totalServiceFeeSats: serviceFeeSats,
       btcPriceUSD,

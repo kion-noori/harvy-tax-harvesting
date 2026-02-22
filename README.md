@@ -1,296 +1,103 @@
-# Harvy - Bitcoin Ordinal Tax Harvesting Platform
+# Harvy — Bitcoin Ordinals Tax Loss Harvesting
 
-A full-stack web application for viewing, managing, and tax-loss harvesting Bitcoin Ordinals (NFTs on Bitcoin).
+## The Problem
 
-## Features
+If you hold Bitcoin Ordinals that have dropped in value, you're sitting on unrealized losses. Those losses could offset your capital gains and reduce your tax bill — but there's no easy way to sell low-value or "underwater" Ordinals. Marketplace listings take time, buyers are scarce for losing positions, and the whole process is manual and fragmented.
 
-- **Bitcoin Wallet Integration**: Connect via Xverse wallet to view your Ordinals
-- **Ordinal Display**: Browse all inscriptions owned by your Taproot address
-- **Secure Storage**: Encrypted wallet address storage
-- **Performance Optimized**: In-memory caching and rate limiting
-- **Tax Harvesting**: (Coming soon) Track cost basis and identify tax-loss harvesting opportunities
+Most crypto tax tools tell you *what* you owe. None of them help you *reduce* what you owe.
 
-## Tech Stack
+## The Solution
 
-- **Frontend**: React 18, React Router, Tailwind-inspired styling
-- **Backend**: Node.js + Express (ESM), Hiro Ordinals API, Magic Eden API
-- **Wallet**: sats-connect (Xverse integration)
-- **Security**: Helmet, CORS, AES encryption, rate limiting
-- **Data**: In-memory caching, Magic Eden pricing integration
+Harvy buys your underwater Ordinals directly — no listings, no waiting, no counterparty risk. You connect your wallet, see which Ordinals are at a loss, and sell them to Harvy in a single atomic transaction. You realize the capital loss instantly, and Harvy gives you a downloadable receipt you can use at tax time.
 
-## Prerequisites
+- **Instant liquidity** — Sell losing Ordinals in one click. No marketplace, no buyers needed.
+- **You keep the savings** — Harvy charges a small fee (5-15%) on the tax benefit. You keep the rest.
+- **Non-custodial** — Every transaction uses PSBTs (Partially Signed Bitcoin Transactions). Your private keys never leave your wallet.
 
-- Node.js 16+ and Yarn
-- Bitcoin wallet (Xverse browser extension recommended)
+## How It Works
 
-## Getting Started
+1. **Connect your wallet** — Harvy supports Xverse, Unisat, and Leather. No signup, no account creation.
+2. **Review your Ordinals** — See your portfolio with current values and unrealized gains/losses.
+3. **Select and sell** — Pick the Ordinals you want to harvest losses on. Harvy handles the atomic swap and gives you a downloadable tax loss receipt.
 
-### 1. Install Dependencies
+## Running Locally
+
+### Prerequisites
+- Node.js 18+
+- A Bitcoin wallet browser extension (Xverse, Unisat, or Leather)
+
+### Setup
 
 ```bash
-# Install root dependencies
-yarn install
+# Install backend dependencies
+npm install
 
 # Install frontend dependencies
-cd frontend && yarn install && cd ..
-```
+cd frontend && npm install && cd ..
 
-### 2. Configure Environment Variables
-
-#### Backend Configuration
-
-Copy the example file and add your configuration:
-
-```bash
+# Configure environment
 cp .env.example .env
+# Edit .env with your settings (see below)
 ```
 
-Generate a secure encryption key:
+### Start the App
 
 ```bash
-openssl rand -base64 32
+# Terminal 1 — backend
+node server.js
+
+# Terminal 2 — frontend
+cd frontend && npm start
 ```
 
-Edit `.env` and add:
-- `ENCRYPTION_KEY`: The generated key from above
-- `ALLOWED_ORIGINS`: Your frontend URL (default: http://localhost:3000)
-- `PORT`: Backend port (default: 3001)
-- `MAGICEDEN_API_KEY`: (Optional) Your Magic Eden API key for pricing data
+The frontend runs on `http://localhost:3000`, backend on `http://localhost:3001`.
 
-#### Frontend Configuration
+### Environment Variables
 
-```bash
-cd frontend
-cp .env .env.local  # For local overrides
-```
+| Variable | Description |
+|----------|-------------|
+| `BITCOIN_NETWORK` | `mainnet` or `testnet` |
+| `MEMPOOL_API_URL` | Mempool.space API endpoint |
+| `HARVY_WALLET_ADDRESS` | Harvy's Bitcoin wallet address (Taproot) |
+| `HARVY_WALLET_PRIVATE_KEY` | Harvy's wallet private key (WIF format) |
 
-Edit `frontend/.env` and add:
-- `REACT_APP_ENCRYPTION_KEY`: **Same key as backend**
-- `REACT_APP_API_URL`: Backend URL (default: http://localhost:3001)
+## Architecture
 
-### 3. Run Development Servers
+| Layer | Tech |
+|-------|------|
+| Frontend | React (CRA + CRACO), plain CSS |
+| Backend | Node.js, Express |
+| Bitcoin | bitcoinjs-lib v7, PSBTs, Taproot |
+| Wallet Integration | sats-connect (Xverse), Unisat API, Leather API |
+| Ordinals Data | Hiro Ordinals API |
+| UTXO Data | Mempool.space API |
 
-#### Option A: Run Both Servers Concurrently
+## How Transactions Work
 
-```bash
-yarn dev
-```
+Harvy uses **atomic swaps via PSBT** so neither party needs to trust the other:
 
-This starts:
-- Backend on http://localhost:3001
-- Frontend on http://localhost:3000
+1. Harvy creates a PSBT with the seller's Ordinal input(s) and Harvy's funding UTXOs
+2. Harvy signs its own inputs (Taproot key-path spend)
+3. The seller's wallet signs the Ordinal input(s)
+4. The fully-signed transaction is broadcast to the Bitcoin network
+5. The seller receives payment, Harvy receives the Ordinal(s) — all in one atomic transaction
 
-#### Option B: Run Separately
-
-Terminal 1 (Backend):
-```bash
-yarn start
-```
-
-Terminal 2 (Frontend):
-```bash
-cd frontend && yarn start
-```
-
-### 4. Connect Your Wallet
-
-1. Install [Xverse Browser Extension](https://xverse.app)
-2. Open the app at http://localhost:3000
-3. Click "Connect Bitcoin Wallet"
-4. Approve the connection in Xverse
-5. Your Ordinals will load automatically
-
-## Project Structure
-
-```
-my-nft-project/
-├── server.js                 # Express backend
-├── package.json              # Root dependencies & scripts
-├── .env                      # Backend environment (gitignored)
-├── .env.example              # Backend env template
-│
-├── frontend/
-│   ├── src/
-│   │   ├── App.js           # Main application
-│   │   ├── components/      # React components
-│   │   │   ├── BitcoinWalletButton.js
-│   │   │   ├── OrdinalList.js
-│   │   │   ├── OrdinalMedia.jsx
-│   │   │   └── WalletStatus.js
-│   │   ├── utils/
-│   │   │   └── encryption.js    # AES encryption utilities
-│   │   └── services/
-│   │       └── userDataService.js
-│   ├── public/
-│   ├── package.json
-│   └── .env                 # Frontend environment
-│
-└── README.md
-```
+Inscription inputs are ordered first (before funding inputs) to preserve ordinal sat positions per the FIFO model.
 
 ## API Endpoints
 
-### Backend Routes
-
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/test` | GET | Health check |
-| `/api/ordinals?address={addr}` | GET | Fetch inscriptions for Taproot address |
+| `/api/ordinals?address={addr}` | GET | Fetch inscriptions for a Taproot address (with UTXO cross-check) |
 | `/api/ordinal-meta/:id` | GET | Get inscription metadata |
 | `/api/ordinal-bytes/:id` | GET | Stream inscription content |
-| `/api/ordinal-activity/:id` | GET | Get marketplace activity/purchase history |
-| `/api/ordinal-value/:id` | GET | Get current market value/listing price |
+| `/api/create-batch-psbt` | POST | Create a batched PSBT for multiple ordinal purchases |
+| `/api/finalize-psbt` | POST | Finalize and broadcast a seller-signed PSBT |
 
-### Rate Limits
+## Status
 
-- General API: 100 requests per 15 minutes per IP
-- Ordinals endpoint: 20 requests per minute per IP
-
-### Caching
-
-- Ordinals list: 10 minutes (in-memory + HTTP cache)
-- Metadata: 24 hours (inscription metadata is immutable)
-- Content bytes: 24 hours (browser + CDN cache)
-
-## Security Features
-
-✅ **Implemented:**
-- Helmet security headers
-- CORS with origin whitelist
-- AES-256 encrypted wallet storage
-- Rate limiting on all API routes
-- Input validation (Taproot address format)
-- Request size limits (1MB max)
-- Environment-based configuration
-
-⚠️ **Important Security Notes:**
-
-1. **Never commit `.env` files** - They contain secrets
-2. **Rotate encryption keys** if exposed
-3. **Use HTTPS** in production
-4. **Keep dependencies updated** - Run `yarn audit` regularly
-
-## Production Deployment
-
-### 1. Build Frontend
-
-```bash
-cd frontend
-yarn build
-```
-
-This creates an optimized build in `frontend/build/`.
-
-### 2. Configure Production Environment
-
-Create `.env.production` (backend):
-
-```env
-NODE_ENV=production
-PORT=3001
-ALLOWED_ORIGINS=https://yourdomain.com
-ENCRYPTION_KEY=your_production_key_here
-```
-
-Create `frontend/.env.production`:
-
-```env
-REACT_APP_API_URL=https://api.yourdomain.com
-REACT_APP_ENCRYPTION_KEY=your_production_key_here
-NODE_ENV=production
-GENERATE_SOURCEMAP=false
-```
-
-**⚠️ CRITICAL**: Use the **same encryption key** for backend and frontend!
-
-### 3. Deploy
-
-The backend serves the frontend build automatically in production:
-
-```bash
-# On your production server
-NODE_ENV=production node server.js
-```
-
-Visit your domain - the backend will serve the React app and handle API requests.
-
-### Recommended Hosting
-
-- **Backend**: Railway, Render, Fly.io, or DigitalOcean
-- **Frontend CDN**: Vercel, Netlify (if separated from backend)
-- **Full-stack**: Single server deployment (included in server.js)
-
-## Development
-
-### Running Tests
-
-```bash
-# Frontend tests
-cd frontend && yarn test
-```
-
-### Code Quality
-
-The app includes:
-- ESLint configuration (React + Jest)
-- Webpack polyfills for Node.js crypto modules
-- Craco for custom webpack config
-
-### Common Issues
-
-**Problem**: "REACT_APP_ENCRYPTION_KEY is not set"
-**Solution**: Add the encryption key to `frontend/.env`
-
-**Problem**: CORS errors
-**Solution**: Add your frontend URL to `ALLOWED_ORIGINS` in backend `.env`
-
-**Problem**: Wallet not connecting
-**Solution**: Ensure Xverse extension is installed and unlocked
-
-**Problem**: Ordinals not loading
-**Solution**: Check that address is valid Taproot format (starts with `bc1p`, 62 characters)
-
-## Roadmap
-
-### Phase 1: Core Functionality ✅
-- [x] Bitcoin wallet connection
-- [x] Ordinal fetching and display
-- [x] Security hardening
-- [x] Performance optimization
-
-### Phase 2: Tax Features 🚧
-- [x] Magic Eden API integration
-- [x] Price feed for marketplace ordinals
-- [x] Activity/purchase history tracking
-- [ ] Manual cost basis entry for minted ordinals
-- [ ] Gain/loss calculation
-- [ ] Tax-loss harvesting selection UI
-- [ ] CSV export for tax reporting
-
-### Phase 3: Advanced Features 📋
-- [ ] Transaction signing (PSBT)
-- [ ] Actual selling capability
-- [ ] Portfolio analytics
-- [ ] Multi-wallet support
-- [ ] Mobile responsiveness improvements
-
-## Contributing
-
-This is a private project, but contributions are welcome:
-
-1. Create a feature branch
-2. Make your changes
-3. Test thoroughly
-4. Submit a pull request
+This is an MVP under active development.
 
 ## License
 
-Private - All Rights Reserved
-
-## Support
-
-For issues or questions, please open a GitHub issue.
-
----
-
-**Built with ❤️ for the Bitcoin Ordinals community**
+Private — All Rights Reserved

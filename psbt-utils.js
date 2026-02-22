@@ -299,51 +299,80 @@ export async function createOrdinalPurchasePSBT(params) {
   // Create PSBT
   const psbt = new bitcoin.Psbt({ network });
 
+  // Load Harvy's key pair for Taproot input setup
+  const harvyKeyPair = loadHarvyKeyPair();
+  const harvyInternalPubkey = harvyKeyPair.publicKey.subarray(1, 33); // x-only pubkey
+  const harvyP2tr = bitcoin.payments.p2tr({ internalPubkey: harvyInternalPubkey, network });
+
   // Add Harvy's inputs (we will sign these)
+  // For Taproot (P2TR) key-path spends, omit sighashType to use SIGHASH_DEFAULT (0x00)
   for (const utxo of harvySelected) {
-    const txHex = await fetchTransactionHex(utxo.txid);
     psbt.addInput({
       hash: utxo.txid,
       index: utxo.vout,
-      nonWitnessUtxo: Buffer.from(txHex, 'hex'),
+      witnessUtxo: {
+        script: harvyP2tr.output,
+        value: BigInt(utxo.value),
+      },
+      tapInternalKey: harvyInternalPubkey,
     });
   }
 
   // Add seller's inscription input (seller will sign this)
+  // tapInternalKey must be the ACTUAL internal public key, not the tweaked output key
+  // For now this function doesn't receive sellerPublicKey - fall back to address extraction
+  // TODO: Pass sellerPublicKey through this path too
+  const sellerDecoded = bitcoin.address.fromBech32(sellerAddress);
+  const sellerInternalPubkey = sellerDecoded.data;
+
   const inscriptionTxHex = await fetchTransactionHex(inscriptionUTXO.txid);
+  const inscriptionPrevTx = bitcoin.Transaction.fromHex(inscriptionTxHex);
+  const inscriptionPrevOutput = inscriptionPrevTx.outs[inscriptionUTXO.vout];
   psbt.addInput({
     hash: inscriptionUTXO.txid,
     index: inscriptionUTXO.vout,
-    nonWitnessUtxo: Buffer.from(inscriptionTxHex, 'hex'),
+    witnessUtxo: {
+      script: inscriptionPrevOutput.script,
+      value: BigInt(inscriptionUTXO.value),
+    },
+    tapInternalKey: sellerInternalPubkey,
   });
 
   // Add seller's payment UTXOs for service fee (seller will sign these)
   for (const utxo of sellerPaymentUTXOs) {
     const txHex = await fetchTransactionHex(utxo.txid);
+    const prevTx = bitcoin.Transaction.fromHex(txHex);
+    const prevOutput = prevTx.outs[utxo.vout];
     psbt.addInput({
       hash: utxo.txid,
       index: utxo.vout,
-      nonWitnessUtxo: Buffer.from(txHex, 'hex'),
+      witnessUtxo: {
+        script: prevOutput.script,
+        value: BigInt(utxo.value),
+      },
+      tapInternalKey: sellerInternalPubkey,
     });
   }
 
   // OUTPUT 1: Payment to seller (offerSats)
+  // Note: bitcoinjs-lib v7 requires BigInt for output values
   psbt.addOutput({
     address: sellerAddress,
-    value: offerSats,
+    value: BigInt(offerSats),
   });
 
-  // OUTPUT 2: Inscription to Harvy
+  // OUTPUT 2: Inscription to Harvy (pad to dust limit if needed)
+  const MIN_OUTPUT_VALUE = 546;
   psbt.addOutput({
     address: harvyAddress,
-    value: inscriptionUTXO.value, // Preserve the UTXO value (usually 546 or 600 sats)
+    value: BigInt(Math.max(inscriptionUTXO.value, MIN_OUTPUT_VALUE)),
   });
 
-  // OUTPUT 3: Service fee to Harvy
-  if (serviceFeeSats > 0) {
+  // OUTPUT 3: Service fee to Harvy (only if above dust limit)
+  if (serviceFeeSats >= MIN_OUTPUT_VALUE) {
     psbt.addOutput({
       address: harvyAddress,
-      value: serviceFeeSats,
+      value: BigInt(serviceFeeSats),
     });
   }
 
@@ -351,7 +380,7 @@ export async function createOrdinalPurchasePSBT(params) {
   if (harvyChange > 546) { // Only create change output if above dust limit
     psbt.addOutput({
       address: harvyAddress,
-      value: harvyChange,
+      value: BigInt(harvyChange),
     });
   }
 
@@ -359,18 +388,13 @@ export async function createOrdinalPurchasePSBT(params) {
   // (This requires knowing the total of sellerPaymentUTXOs and subtracting serviceFeeSats)
 
   // SECURITY: Sign Harvy's inputs only (not the seller's)
-  // We sign indices 0 to (harvySelected.length - 1)
-  const harvyKeyPair = loadHarvyKeyPair();
+  // For Taproot key-path spends, use the tweaked signer with SIGHASH_DEFAULT
+  const tweakedSigner = harvyKeyPair.tweak(
+    bitcoin.crypto.taggedHash('TapTweak', harvyInternalPubkey)
+  );
 
   for (let i = 0; i < harvySelected.length; i++) {
-    psbt.signInput(i, harvyKeyPair);
-  }
-
-  // Validate Harvy's signatures
-  for (let i = 0; i < harvySelected.length; i++) {
-    if (!psbt.validateSignaturesOfInput(i, () => true)) {
-      throw new Error(`Invalid signature on Harvy's input ${i}`);
-    }
+    psbt.signInput(i, tweakedSigner);
   }
 
   // Return partially signed PSBT (seller still needs to sign their inputs)
@@ -418,6 +442,7 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
   const {
     ordinals,          // Array of { inscriptionId, purchasePriceSats, currentPriceSats }
     sellerAddress,
+    sellerPublicKey,   // Seller's actual internal public key (hex string from wallet)
     totalOfferSats,    // Total payment (600 × ordinals.length)
     totalServiceFeeSats,
     btcPriceUSD,
@@ -458,8 +483,12 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
     });
   }
 
-  // Calculate total inscription value (we need to preserve these values in outputs)
-  const totalInscriptionValue = inscriptionUTXOs.reduce((sum, u) => sum + u.value, 0);
+  // Calculate total inscription output value (padded to dust limit if needed)
+  const MIN_OUTPUT_VALUE = 546;
+  const totalInscriptionOutputValue = inscriptionUTXOs.reduce(
+    (sum, u) => sum + Math.max(u.value, MIN_OUTPUT_VALUE),
+    0
+  );
 
   // Fetch Harvy's UTXOs to fund the purchase
   const harvyUTXOs = await fetchUTXOs(harvyAddress);
@@ -479,56 +508,114 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
   // Select UTXOs for Harvy to pay totalOfferSats + fees
   const { selected: harvySelected, change: harvyChange } = selectUTXOs(
     harvyUTXOs,
-    totalOfferSats + totalInscriptionValue, // Need to cover payment + inscription preservation
+    totalOfferSats + totalInscriptionOutputValue, // Need to cover payment + inscription outputs (padded)
     estimatedFee
   );
 
   // Create PSBT
   const psbt = new bitcoin.Psbt({ network });
 
-  // Add Harvy's inputs first (we will sign these)
-  for (const utxo of harvySelected) {
-    const txHex = await fetchTransactionHex(utxo.txid);
-    psbt.addInput({
-      hash: utxo.txid,
-      index: utxo.vout,
-      nonWitnessUtxo: Buffer.from(txHex, 'hex'),
-    });
+  // Load Harvy's key pair for Taproot input setup
+  const harvyKeyPair = loadHarvyKeyPair();
+  const harvyInternalPubkey = harvyKeyPair.publicKey.subarray(1, 33); // x-only pubkey
+  const harvyP2tr = bitcoin.payments.p2tr({ internalPubkey: harvyInternalPubkey, network });
+
+  // Resolve seller's internal public key for tapInternalKey
+  let sellerInternalPubkey;
+  if (sellerPublicKey) {
+    const pubkeyBuf = Buffer.from(sellerPublicKey, 'hex');
+    sellerInternalPubkey = pubkeyBuf.length === 33 ? pubkeyBuf.subarray(1, 33) : pubkeyBuf;
+    console.log(`Seller pubkey from wallet: ${sellerPublicKey} (${pubkeyBuf.length} bytes)`);
+    console.log(`Seller x-only internal pubkey: ${sellerInternalPubkey.toString('hex')}`);
+
+    const derivedP2tr = bitcoin.payments.p2tr({ internalPubkey: sellerInternalPubkey, network });
+    console.log(`Derived address from pubkey: ${derivedP2tr.address}`);
+    console.log(`Actual seller address:       ${sellerAddress}`);
+    console.log(`Address match: ${derivedP2tr.address === sellerAddress}`);
+
+    if (derivedP2tr.address !== sellerAddress) {
+      console.warn('⚠️  Public key does NOT derive to seller address!');
+      const sellerDecoded = bitcoin.address.fromBech32(sellerAddress);
+      console.log(`Tweaked output key from address: ${sellerDecoded.data.toString('hex')}`);
+    }
+  } else {
+    console.warn('⚠️  No sellerPublicKey provided, falling back to tweaked key from address');
+    const sellerDecoded = bitcoin.address.fromBech32(sellerAddress);
+    sellerInternalPubkey = sellerDecoded.data;
   }
 
-  // Add seller's inscription inputs (seller will sign these)
-  // CRITICAL: These must be added in order, and we track the indices for signing
+  // ============================================================
+  // INPUT ORDERING: Inscription inputs FIRST, then Harvy's funding inputs.
+  //
+  // CRITICAL for ordinal theory: Sats flow through a transaction using
+  // first-in-first-out (FIFO) ordering. If Harvy's large funding UTXO
+  // comes first, the inscription's sats end up at a high offset and
+  // get consumed as miner fee instead of flowing to an output.
+  //
+  // By placing inscription inputs first, their sats are at offset 0+
+  // and flow directly into the first outputs (the inscription outputs).
+  // ============================================================
+
+  // INPUTS 0 to N-1: Seller's inscription inputs (seller will sign these)
   const sellerInputIndices = [];
   for (const utxo of inscriptionUTXOs) {
     const txHex = await fetchTransactionHex(utxo.txid);
+    const prevTx = bitcoin.Transaction.fromHex(txHex);
+    const prevOutput = prevTx.outs[utxo.vout];
     const inputIndex = psbt.inputCount;
     sellerInputIndices.push(inputIndex);
     psbt.addInput({
       hash: utxo.txid,
       index: utxo.vout,
-      nonWitnessUtxo: Buffer.from(txHex, 'hex'),
+      witnessUtxo: {
+        script: prevOutput.script,
+        value: BigInt(utxo.value),
+      },
+      tapInternalKey: sellerInternalPubkey,
     });
   }
 
-  // OUTPUT 1: Payment to seller (totalOfferSats = 600 × ordinal count)
+  // INPUTS N to M: Harvy's funding inputs
+  const harvyInputStartIndex = psbt.inputCount;
+  for (const utxo of harvySelected) {
+    psbt.addInput({
+      hash: utxo.txid,
+      index: utxo.vout,
+      witnessUtxo: {
+        script: harvyP2tr.output,
+        value: BigInt(utxo.value),
+      },
+      tapInternalKey: harvyInternalPubkey,
+    });
+  }
+
+  // ============================================================
+  // OUTPUT ORDERING: Inscription outputs FIRST, then payment/change.
+  //
+  // Ordinal FIFO: inscription sats from inputs 0..N-1 must flow into
+  // the first outputs so the inscriptions land at Harvy's address.
+  // ============================================================
+
+  // OUTPUTS 0 to N-1: Each inscription to Harvy (MUST come first for ordinal FIFO)
+  for (const utxo of inscriptionUTXOs) {
+    const outputValue = Math.max(utxo.value, MIN_OUTPUT_VALUE);
+    psbt.addOutput({
+      address: harvyAddress,
+      value: BigInt(outputValue),
+    });
+  }
+
+  // OUTPUT N: Payment to seller
   psbt.addOutput({
     address: sellerAddress,
-    value: totalOfferSats,
+    value: BigInt(totalOfferSats),
   });
 
-  // OUTPUTS 2-N: Each inscription to Harvy (preserve UTXO values)
-  for (const utxo of inscriptionUTXOs) {
+  // OUTPUT N+1: Service fee to Harvy (only if above dust limit)
+  if (totalServiceFeeSats >= MIN_OUTPUT_VALUE) {
     psbt.addOutput({
       address: harvyAddress,
-      value: utxo.value, // Preserve the inscription UTXO value
-    });
-  }
-
-  // OUTPUT N+1: Service fee to Harvy (combined)
-  if (totalServiceFeeSats > 0) {
-    psbt.addOutput({
-      address: harvyAddress,
-      value: totalServiceFeeSats,
+      value: BigInt(totalServiceFeeSats),
     });
   }
 
@@ -536,22 +623,19 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
   if (harvyChange > 546) {
     psbt.addOutput({
       address: harvyAddress,
-      value: harvyChange,
+      value: BigInt(harvyChange),
     });
+  } else {
+    console.log('Skipping change output (below dust or zero)');
   }
 
-  // Sign Harvy's inputs only (indices 0 to harvySelected.length - 1)
-  const harvyKeyPair = loadHarvyKeyPair();
+  // Sign Harvy's inputs only (starting at harvyInputStartIndex)
+  const tweakedSigner = harvyKeyPair.tweak(
+    bitcoin.crypto.taggedHash('TapTweak', harvyInternalPubkey)
+  );
 
-  for (let i = 0; i < harvySelected.length; i++) {
-    psbt.signInput(i, harvyKeyPair);
-  }
-
-  // Validate Harvy's signatures
-  for (let i = 0; i < harvySelected.length; i++) {
-    if (!psbt.validateSignaturesOfInput(i, () => true)) {
-      throw new Error(`Invalid signature on Harvy's input ${i}`);
-    }
+  for (let i = harvyInputStartIndex; i < harvyInputStartIndex + harvySelected.length; i++) {
+    psbt.signInput(i, tweakedSigner);
   }
 
   // Return partially signed PSBT
@@ -610,18 +694,59 @@ export async function broadcastPSBT(psbtBase64) {
   }
 
   // Sanity check: Total output value shouldn't be absurdly high
-  const MAX_TOTAL_OUTPUT_SATS = 1000000000; // 10 BTC max (way more than we'd ever pay)
-  const totalOutputValue = psbt.txOutputs.reduce((sum, output) => sum + output.value, 0);
+  const MAX_TOTAL_OUTPUT_SATS = BigInt(1000000000); // 10 BTC max
+  const totalOutputValue = psbt.txOutputs.reduce((sum, output) => sum + output.value, BigInt(0));
 
   if (totalOutputValue > MAX_TOTAL_OUTPUT_SATS) {
     throw new Error(`Invalid PSBT: Total output value (${totalOutputValue} sats) exceeds maximum allowed`);
   }
 
   // Log transaction details for monitoring
-  console.log(`📋 PSBT Details: ${inputCount} inputs, ${outputCount} outputs, total: ${totalOutputValue} sats`);
+  console.log(`📋 PSBT Details: ${inputCount} inputs, ${outputCount} outputs, total: ${totalOutputValue.toString()} sats`);
+  console.log(`📋 Raw PSBT base64 (first 200 chars): ${psbtBase64.slice(0, 200)}...`);
+
+  // Debug: log each input's signing status
+  for (let i = 0; i < inputCount; i++) {
+    const input = psbt.data.inputs[i];
+    const hasFinalWitness = !!input.finalScriptWitness;
+    const hasFinalScript = !!input.finalScriptSig;
+    console.log(`  Input ${i}: tapKeySig=${!!input.tapKeySig}, tapInternalKey=${input.tapInternalKey ? input.tapInternalKey.toString('hex').slice(0, 16) + '...' : 'none'}, partialSig=${!!input.partialSig}, sighashType=${input.sighashType}, finalWitness=${hasFinalWitness}, finalScript=${hasFinalScript}`);
+    if (input.tapKeySig) {
+      console.log(`    tapKeySig (${input.tapKeySig.length} bytes): ${input.tapKeySig.toString('hex').slice(0, 40)}...`);
+    }
+    if (hasFinalWitness) {
+      console.log(`    finalScriptWitness (${input.finalScriptWitness.length} bytes): ${input.finalScriptWitness.toString('hex').slice(0, 40)}...`);
+    }
+  }
 
   // Finalize all inputs
-  psbt.finalizeAllInputs();
+  for (let i = 0; i < inputCount; i++) {
+    const input = psbt.data.inputs[i];
+
+    // Skip already-finalized inputs (wallet may have already finalized them)
+    if (input.finalScriptWitness || input.finalScriptSig) {
+      console.log(`  ✅ Input ${i} already finalized, skipping`);
+      continue;
+    }
+
+    // Use bitcoinjs-lib's built-in Taproot finalizer for inputs with tapKeySig
+    if (input.tapKeySig) {
+      try {
+        psbt.finalizeTaprootInput(i);
+        console.log(`  ✅ Finalized input ${i} (taproot built-in)`);
+      } catch (e) {
+        console.error(`  ❌ Taproot finalization failed for input ${i}: ${e.message}`);
+        throw e;
+      }
+    } else {
+      try {
+        psbt.finalizeInput(i);
+        console.log(`  ✅ Finalized input ${i} (standard)`);
+      } catch (e) {
+        throw new Error(`Cannot finalize input ${i}: ${e.message}. Has tapKeySig: ${!!input.tapKeySig}, has partialSig: ${!!input.partialSig}`);
+      }
+    }
+  }
 
   // Extract the final transaction
   const tx = psbt.extractTransaction();

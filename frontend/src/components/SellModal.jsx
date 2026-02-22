@@ -6,7 +6,7 @@ import '../styles/SellModal.css';
  * Modal for confirming sale of multiple ordinals to Harvy
  * Shows each ordinal with editable purchase price, calculates totals
  */
-export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, btcAddress, walletType }) {
+export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, btcAddress, walletType, btcPublicKey }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
   const [txResult, setTxResult] = useState(null);
@@ -247,6 +247,9 @@ guidance on reporting cryptocurrency transactions.
         currentPriceSats: Math.round((ord.currentPrice || 0) * 100000000),
       }));
 
+      // Debug: log the public key being sent
+      console.log('SellModal: btcPublicKey being sent to backend:', btcPublicKey, 'length:', btcPublicKey?.length);
+
       // Create SINGLE batched PSBT for all ordinals
       const response = await fetch('http://localhost:3001/api/create-batch-psbt', {
         method: 'POST',
@@ -254,6 +257,7 @@ guidance on reporting cryptocurrency transactions.
         body: JSON.stringify({
           ordinals: ordinalsData,
           sellerAddress: btcAddress,
+          sellerPublicKey: btcPublicKey,
           btcPriceUSD,
           userTaxRate: userTaxRate / 100,
         }),
@@ -270,21 +274,20 @@ guidance on reporting cryptocurrency transactions.
       let signedPsbtBase64;
 
       if (walletType === 'xverse') {
+        // Xverse signPsbt uses signInputs: Record<address, inputIndexes[]>
         const signResponse = await request('signPsbt', {
           psbt: data.psbtBase64,
           broadcast: false,
-          inputsToSign: [
-            {
-              address: btcAddress,
-              signingIndexes: data.details.sellerInputIndices,
-            },
-          ],
+          signInputs: {
+            [btcAddress]: data.details.sellerInputIndices,
+          },
         });
 
         if (signResponse.status !== 'success') {
           throw new Error('User cancelled signing or signing failed');
         }
         signedPsbtBase64 = signResponse.result.psbt;
+        console.log('Xverse signed PSBT (first 200 chars):', signedPsbtBase64?.slice(0, 200));
 
       } else if (walletType === 'unisat') {
         signedPsbtBase64 = await window.unisat.signPsbt(data.psbtHex, {
@@ -319,7 +322,8 @@ guidance on reporting cryptocurrency transactions.
       const broadcastData = await broadcastResponse.json();
 
       if (!broadcastResponse.ok || !broadcastData.success) {
-        throw new Error(broadcastData.error || 'Failed to broadcast transaction');
+        const detail = broadcastData.details ? `: ${broadcastData.details}` : '';
+        throw new Error((broadcastData.error || 'Failed to broadcast transaction') + detail);
       }
 
       // Success - single transaction for all ordinals

@@ -4,58 +4,65 @@ import '@google/model-viewer';
 
 /**
  * Shows an inscription using the right element based on its content_type.
- * If contentType is provided, uses it immediately. Otherwise fetches from Hiro API.
+ * Uses contentUri/previewUri from Magic Eden's ord-mirror when available,
+ * falls back to ordinals.com.
  */
-export default function OrdinalMedia({ id, contentType }) {
-  // If contentType is null/undefined/empty, fetch from Hiro to get the real type
-  // Empty string ('') means Hiro doesn't have the type, so we need to probe it
+export default function OrdinalMedia({ id, contentType, contentUri, previewUri, offchainImage, collectionName }) {
   const needsProbing = !contentType || contentType === '' || contentType === 'null';
   const [ctype, setCtype] = useState(needsProbing ? null : contentType);
   const [error, setError] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [textContent, setTextContent] = useState(null);
-  const [useFallback, setUseFallback] = useState(false);
+  const [srcIndex, setSrcIndex] = useState(0);
 
-  // Fetch metadata only for inscriptions with empty/null content_type
+  // Build ordered list of content sources to try
+  const sources = [];
+  if (contentUri) sources.push(contentUri);
+  sources.push(`https://ordinals.com/content/${id}`);
+  sources.push(`https://api.hiro.so/ordinals/v1/inscriptions/${id}/content`);
+
+  const src = sources[srcIndex] || sources[0];
+
+  const tryNextSource = () => {
+    if (srcIndex < sources.length - 1) {
+      setSrcIndex(prev => prev + 1);
+    } else {
+      setImageError(true);
+      setError(true);
+    }
+  };
+
+  // Probe content type if not provided
   useEffect(() => {
-    if (!needsProbing || ctype) return; // Already have it or don't need it
+    if (!needsProbing || ctype) return;
 
     let alive = true;
     (async () => {
+      // Try the primary source first
+      const probeUrl = contentUri || `https://ordinals.com/content/${id}`;
       try {
-        // Try to get content-type by probing ordinals.com with HEAD request
-        const response = await fetch(`https://ordinals.com/content/${id}`, { method: 'HEAD' });
+        const response = await fetch(probeUrl, { method: 'HEAD' });
         if (response.ok && alive) {
           const detectedType = response.headers.get('content-type') || 'application/octet-stream';
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`✅ Probed content-type for ${id}:`, detectedType);
-          }
           setCtype(detectedType);
-        } else if (alive) {
-          // Fallback to image if probe fails
-          setCtype('image/*');
+          return;
         }
-      } catch (err) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(`⚠️ Probe failed for ${id}, defaulting to image`);
-        }
-        if (alive) setCtype('image/*');
-      }
+      } catch {}
+      if (alive) setCtype('image/*');
     })();
 
     return () => { alive = false; };
-  }, [id, needsProbing, ctype]);
+  }, [id, needsProbing, ctype, contentUri]);
 
-  // Fetch text content when content type is text (use direct URL)
+  // Fetch text content for text/* types
   useEffect(() => {
-    if (ctype && ctype.startsWith('text/')) {
-      const src = `https://ordinals.com/content/${id}`;
+    if (ctype && ctype.startsWith('text/') && !ctype.startsWith('text/html')) {
       fetch(src)
         .then(r => r.text())
         .then(text => setTextContent(text))
         .catch(() => setError(true));
     }
-  }, [ctype, id]);
+  }, [ctype, src]);
 
   const renderPlaceholder = () => (
     <div style={{
@@ -89,26 +96,14 @@ export default function OrdinalMedia({ id, contentType }) {
     </div>
   );
 
-  if (!ctype) {
-    return renderPlaceholder();
-  }
+  if (!ctype) return renderPlaceholder();
+  if (imageError || error) return renderPlaceholder();
 
-  // Show placeholder if previous load attempt failed
-  if (imageError || error) {
-    return renderPlaceholder();
-  }
-
-  // Use direct ordinals.com URLs first, fallback to Hiro API if needed
-  const ordinalsSrc = `https://ordinals.com/content/${id}`;
-  const hiroSrc = `https://api.hiro.so/ordinals/v1/inscriptions/${id}/content`;
-  const src = useFallback ? hiroSrc : ordinalsSrc;
-
-  // Handle HTML content with iframe for interactive rendering
-  // SECURITY: Strict sandbox to prevent XSS attacks from malicious inscriptions
+  // HTML content — render in sandboxed iframe
   if (ctype && (ctype.startsWith('text/html') || ctype === 'text/javascript')) {
     return (
       <iframe
-        key={`${id}-${useFallback ? 'hiro' : 'ordinals'}`}
+        key={`${id}-${srcIndex}`}
         src={src}
         title={`Inscription ${id}`}
         sandbox="allow-scripts allow-same-origin"
@@ -120,91 +115,87 @@ export default function OrdinalMedia({ id, contentType }) {
           borderRadius: 8,
           background: 'white'
         }}
-        onError={() => {
-          if (!useFallback) {
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`🔄 Trying Hiro API fallback for HTML ${id}`);
-            }
-            setUseFallback(true);
-          } else {
-            if (process.env.NODE_ENV === 'development') {
-              console.error(`❌ HTML/JS load failed for ${id} from both sources`);
-            }
-            setError(true);
-          }
-        }}
+        onError={tryNextSource}
       />
     );
   }
 
-  // Handle plain text content (BRC-20 tokens, etc.)
-  if (ctype && ctype.startsWith('text/')) {
+  // JSON and plain text inscriptions — use offchain image if available, otherwise show text content
+  if (ctype && (ctype.startsWith('application/json') || (ctype.startsWith('text/') && !ctype.startsWith('text/html')))) {
+    if (offchainImage) {
+      return (
+        <img
+          key={`${id}-offchain`}
+          src={offchainImage}
+          alt={collectionName || `Inscription ${id}`}
+          style={{ width: '100%', height: 'auto', objectFit: 'cover', borderRadius: 8 }}
+          loading="lazy"
+          onError={() => setImageError(true)}
+        />
+      );
+    }
+    // No collection image — show the text content directly
     return (
       <div style={{
         width: '100%',
         minHeight: 150,
-        padding: '12px',
+        padding: '16px',
         background: 'rgba(255, 255, 255, 0.05)',
         borderRadius: 8,
         fontFamily: 'monospace',
-        fontSize: '11px',
-        color: '#aaa',
-        overflow: 'auto',
-        whiteSpace: 'pre-wrap',
+        fontSize: '13px',
+        color: '#ccc',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
         wordBreak: 'break-word'
       }}>
-        {textContent || 'Loading text...'}
+        {textContent || 'Loading...'}
       </div>
     );
   }
 
-  if (ctype.startsWith('image/')) {
+  // Images (but not SVG — handled separately below)
+  if (ctype.startsWith('image/') && !ctype.includes('svg')) {
     return (
       <img
-        key={`${id}-${useFallback ? 'hiro' : 'ordinals'}`}
+        key={`${id}-${srcIndex}`}
         src={src}
         alt={`Inscription ${id}`}
         style={{ width: '100%', height: 'auto', objectFit: 'cover', borderRadius: 8 }}
         loading="lazy"
-        onLoad={() => {
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`✅ Image loaded: ${id} from ${useFallback ? 'Hiro' : 'ordinals.com'}`);
-          }
-        }}
-        onError={(e) => {
-          if (!useFallback) {
-            // Try Hiro API as fallback
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`🔄 Trying Hiro API fallback for ${id}`);
-            }
-            setUseFallback(true);
-          } else {
-            // Both sources failed
-            if (process.env.NODE_ENV === 'development') {
-              console.error(`❌ Image load failed for ${id} from both sources`);
-            }
-            setImageError(true);
-            e.currentTarget.style.display = 'none';
-          }
-        }}
+        onError={tryNextSource}
       />
     );
   }
 
+  // SVG — use object tag for interactive SVG, with fallback
+  if (ctype.includes('svg')) {
+    return (
+      <object
+        key={`${id}-${srcIndex}`}
+        data={src}
+        type={ctype}
+        style={{ width: '100%', minHeight: 240, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.02)' }}
+        onError={tryNextSource}
+      >
+        {renderPlaceholder()}
+      </object>
+    );
+  }
+
+  // Video
   if (ctype.startsWith('video/')) {
     return (
       <video
+        key={`${id}-${srcIndex}`}
         src={src}
         controls
         playsInline
         preload="metadata"
         style={{ width: '100%', height: 'auto', objectFit: 'cover', borderRadius: 8 }}
-        onError={() => {
-          if (process.env.NODE_ENV === 'development') {
-            console.error(`Video load failed for ${id}`);
-          }
-          setError(true);
-        }}
+        onError={tryNextSource}
       >
         <div style={{ padding: '16px', textAlign: 'center', color: '#888' }}>
           Video format not supported
@@ -213,7 +204,7 @@ export default function OrdinalMedia({ id, contentType }) {
     );
   }
 
-  // Handle 3D models (GLTF, GLB) with interactive viewer
+  // 3D models
   if (ctype.startsWith('model/')) {
     return (
       <div style={{ width: '100%', minHeight: 300, position: 'relative', borderRadius: 8, overflow: 'hidden' }}>
@@ -230,31 +221,57 @@ export default function OrdinalMedia({ id, contentType }) {
           }}
           loading="eager"
         />
-        <div style={{
-          position: 'absolute',
-          bottom: 8,
-          right: 8,
-          padding: '4px 8px',
-          background: 'rgba(0,0,0,0.7)',
-          borderRadius: 4,
-          fontSize: '10px',
-          color: '#aaa'
-        }}>
-          {ctype}
-        </div>
       </div>
     );
   }
 
-  // SVG, audio, or unknown: render in <object> with fallback
+  // Audio
+  if (ctype.startsWith('audio/')) {
+    return (
+      <div style={{
+        width: '100%',
+        minHeight: 150,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
+        borderRadius: 8,
+        padding: '16px'
+      }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🎵</div>
+        <audio src={src} controls preload="metadata" style={{ width: '90%' }} />
+      </div>
+    );
+  }
+
+  // Unknown types — clean placeholder with link
   return (
-    <object
-      data={src}
-      type={ctype}
-      style={{ width: '100%', minHeight: 240, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.02)' }}
-      onError={() => setError(true)}
-    >
-      {renderPlaceholder()}
-    </object>
+    <div style={{
+      width: '100%',
+      minHeight: 150,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
+      borderRadius: 8,
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      color: '#888',
+      padding: '16px',
+      textAlign: 'center'
+    }}>
+      <div style={{ fontSize: '32px', marginBottom: '8px' }}>📄</div>
+      <div style={{ fontSize: '12px', opacity: 0.8 }}>{ctype.split('/')[0]} inscription</div>
+      <a
+        href={`https://ordinals.com/inscription/${id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        style={{ fontSize: '10px', color: '#F7931A', marginTop: '8px', textDecoration: 'none' }}
+      >
+        View on ordinals.com
+      </a>
+    </div>
   );
 }

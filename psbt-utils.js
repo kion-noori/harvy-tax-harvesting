@@ -144,27 +144,79 @@ export async function fetchUTXOs(address) {
  * @returns {Promise<object|null>} - UTXO containing the inscription, or null
  */
 export async function findInscriptionUTXO(address, inscriptionId) {
-  // Inscription ID format: <txid>i<index>
-  // We need to find the UTXO with matching txid and vout
-  const parts = inscriptionId.split('i');
-  if (parts.length !== 2) {
-    throw new Error(`Invalid inscription ID format: ${inscriptionId}`);
+  // The inscription ID contains the REVEAL tx, but the ordinal may have been
+  // transferred since then. We need the CURRENT UTXO location.
+  // Use Magic Eden (fast indexing) with Hiro as fallback.
+
+  let currentTxid, currentVout;
+
+  // Try Magic Eden first (faster indexing than Hiro)
+  try {
+    const meHeaders = { Accept: 'application/json' };
+    if (process.env.MAGICEDEN_API_KEY) {
+      meHeaders['Authorization'] = `Bearer ${process.env.MAGICEDEN_API_KEY}`;
+    }
+    const meResp = await fetch(
+      `https://api-mainnet.magiceden.dev/v2/ord/btc/tokens?tokenIds=${encodeURIComponent(inscriptionId)}`,
+      { headers: meHeaders }
+    );
+    if (meResp.ok) {
+      const meData = await meResp.json();
+      const token = Array.isArray(meData) ? meData[0] : (meData.tokens || [])[0];
+      if (token && token.output) {
+        const [outTxid, outVout] = token.output.split(':');
+        currentTxid = outTxid;
+        currentVout = parseInt(outVout, 10);
+        console.log(`Inscription ${inscriptionId} current UTXO: ${currentTxid}:${currentVout} (from Magic Eden)`);
+      }
+    }
+  } catch (e) {
+    console.warn(`Magic Eden lookup failed: ${e.message}`);
   }
 
-  const [txid, voutStr] = parts;
-  const vout = parseInt(voutStr, 10);
-
-  if (isNaN(vout)) {
-    throw new Error(`Invalid vout in inscription ID: ${inscriptionId}`);
+  // Fallback to Hiro if Magic Eden didn't return data
+  if (!currentTxid) {
+    try {
+      const hiroResp = await fetch(
+        `https://api.hiro.so/ordinals/v1/inscriptions/${inscriptionId}`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (hiroResp.ok) {
+        const hiroData = await hiroResp.json();
+        if (hiroData.output) {
+          const [outTxid, outVout] = hiroData.output.split(':');
+          currentTxid = outTxid;
+          currentVout = parseInt(outVout, 10);
+          console.log(`Inscription ${inscriptionId} current UTXO: ${currentTxid}:${currentVout} (from Hiro fallback)`);
+        }
+      }
+    } catch (e) {
+      console.warn(`Hiro fallback failed: ${e.message}`);
+    }
   }
 
+  // Last resort: parse from inscription ID (works only if never transferred)
+  if (!currentTxid) {
+    const lastI = inscriptionId.lastIndexOf('i');
+    if (lastI <= 0) {
+      throw new Error(`Invalid inscription ID format: ${inscriptionId}`);
+    }
+    currentTxid = inscriptionId.substring(0, lastI);
+    currentVout = parseInt(inscriptionId.substring(lastI + 1), 10);
+    console.log(`Inscription ${inscriptionId} using reveal tx as UTXO (last resort): ${currentTxid}:${currentVout}`);
+  }
+
+  if (isNaN(currentVout)) {
+    throw new Error(`Invalid vout for inscription: ${inscriptionId}`);
+  }
+
+  // Now find this UTXO in the seller's UTXO set
   const utxos = await fetchUTXOs(address);
-
-  // Find the UTXO matching the inscription's txid and vout
-  const inscriptionUTXO = utxos.find(u => u.txid === txid && u.vout === vout);
+  const inscriptionUTXO = utxos.find(u => u.txid === currentTxid && u.vout === currentVout);
 
   if (!inscriptionUTXO) {
-    console.warn(`Inscription UTXO not found: ${inscriptionId} in address ${address}`);
+    console.warn(`Inscription UTXO not found: ${inscriptionId} (looking for ${currentTxid}:${currentVout}) in address ${address}`);
+    console.warn(`Available UTXOs (first 10): ${utxos.slice(0, 10).map(u => `${u.txid.slice(0,8)}...:${u.vout}`).join(', ')}`);
     return null;
   }
 
@@ -774,4 +826,133 @@ export async function broadcastPSBT(psbtBase64) {
   } catch (e) {
     throw new Error(`Failed to broadcast transaction: ${e.message}`);
   }
+}
+
+/**
+ * Validate a fully-signed PSBT before broadcast to protect Harvy's wallet.
+ * This enforces conservative, opinionated rules based on Harvy's own PSBT
+ * construction patterns:
+ *
+ * - At least one input must clearly belong to Harvy (funding input)
+ * - All outputs must decode to standard addresses for the active network
+ * - Exactly ONE non-Harvy output is allowed (the seller's payment)
+ * - The seller payment amount must be within a sane range
+ * - Total output value must be capped
+ *
+ * These checks significantly reduce the risk that an attacker can craft a
+ * malicious PSBT that drains Harvy's wallet, even if they bypass the
+ * normal PSBT creation endpoints.
+ *
+ * @param {string} psbtBase64 - Fully or partially signed PSBT in base64
+ * @throws {Error} if validation fails
+ */
+export function validatePsbtForHarvySafety(psbtBase64) {
+  const network = getNetwork();
+  const harvyAddress = process.env.HARVY_WALLET_ADDRESS;
+
+  if (!harvyAddress) {
+    throw new Error('HARVY_WALLET_ADDRESS not configured');
+  }
+
+  let psbt;
+  try {
+    psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network });
+  } catch (e) {
+    throw new Error(`Invalid PSBT encoding: ${e.message}`);
+  }
+
+  const inputCount = psbt.data.inputs.length;
+  const outputs = psbt.txOutputs;
+
+  if (inputCount < 1) {
+    throw new Error('Invalid PSBT: no inputs');
+  }
+  if (outputs.length < 2) {
+    throw new Error('Invalid PSBT: must have at least 2 outputs');
+  }
+
+  // Derive Harvy and non-Harvy outputs
+  const harvyOutputs = [];
+  const nonHarvyOutputs = [];
+
+  for (let i = 0; i < outputs.length; i++) {
+    const out = outputs[i];
+    let address;
+    try {
+      address = bitcoin.address.fromOutputScript(out.script, network);
+    } catch (e) {
+      // Reject any output we can't decode to a standard address
+      throw new Error(`Output ${i} uses unsupported script type`);
+    }
+
+    if (address === harvyAddress) {
+      harvyOutputs.push({ index: i, value: out.value, address });
+    } else {
+      nonHarvyOutputs.push({ index: i, value: out.value, address });
+    }
+  }
+
+  if (harvyOutputs.length === 0) {
+    throw new Error('Invalid PSBT: no outputs paying Harvy');
+  }
+
+  // Only allow ONE non-Harvy recipient (the seller)
+  if (nonHarvyOutputs.length !== 1) {
+    throw new Error(`Invalid PSBT: expected exactly 1 non-Harvy output, found ${nonHarvyOutputs.length}`);
+  }
+
+  const sellerOutput = nonHarvyOutputs[0];
+
+  // Value guards (sats)
+  const MIN_PAYMENT_SATS = BigInt(parseInt(process.env.MIN_ORDINAL_PAYMENT_SATS || '600', 10));
+  const MAX_SELLER_PAYOUT_SATS = BigInt(parseInt(process.env.MAX_SELLER_PAYOUT_SATS || '10000000', 10)); // default: 0.1 BTC
+
+  if (sellerOutput.value < MIN_PAYMENT_SATS) {
+    throw new Error(
+      `Invalid PSBT: seller payment below minimum (${sellerOutput.value} < ${MIN_PAYMENT_SATS} sats)`
+    );
+  }
+
+  if (sellerOutput.value > MAX_SELLER_PAYOUT_SATS) {
+    throw new Error(
+      `Invalid PSBT: seller payment exceeds max allowed (${sellerOutput.value} > ${MAX_SELLER_PAYOUT_SATS} sats)`
+    );
+  }
+
+  // Require at least one clear Harvy funding input
+  let harvyInputCount = 0;
+  for (let i = 0; i < inputCount; i++) {
+    const input = psbt.data.inputs[i];
+    const witnessUtxo = input.witnessUtxo;
+    if (!witnessUtxo || !witnessUtxo.script) {
+      continue;
+    }
+    try {
+      const addr = bitcoin.address.fromOutputScript(witnessUtxo.script, network);
+      if (addr === harvyAddress) {
+        harvyInputCount++;
+      }
+    } catch {
+      // Ignore inputs we can't decode; we only care about Harvy's
+    }
+  }
+
+  if (harvyInputCount === 0) {
+    throw new Error('Invalid PSBT: no inputs clearly belonging to Harvy');
+  }
+
+  // Cap total outputs to a conservative maximum
+  const MAX_TOTAL_OUTPUT_SATS = BigInt(parseInt(process.env.MAX_TOTAL_OUTPUT_SATS || '1000000000', 10)); // 10 BTC
+  const totalOutputValue = outputs.reduce(
+    (sum, out) => sum + out.value,
+    BigInt(0)
+  );
+
+  if (totalOutputValue > MAX_TOTAL_OUTPUT_SATS) {
+    throw new Error(
+      `Invalid PSBT: total output value (${totalOutputValue} sats) exceeds maximum allowed`
+    );
+  }
+
+  // If we reach here, PSBT passes conservative safety checks.
 }

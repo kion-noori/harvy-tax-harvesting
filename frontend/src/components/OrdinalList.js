@@ -17,7 +17,7 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
-  const [displayCount, setDisplayCount] = useState(24); // Start with 24 items
+  const [displayCount, setDisplayCount] = useState(200); // Show all loaded items
   const [excludeBrc20, setExcludeBrc20] = useState(true); // Filter BRC-20 by default
   const [totalInscriptions, setTotalInscriptions] = useState(0);
   const [currentOffset, setCurrentOffset] = useState(0);
@@ -145,16 +145,32 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
         return;
       }
 
-      // Update items - use functional setState to avoid dependency issues
-      setItems(prevItems => append ? [...prevItems, ...itemsArray] : itemsArray);
-      setTotalInscriptions(data.total || 0);
-      const newOffset = offset + itemsArray.length;
+      // Update items - deduplicate by id to prevent infinite scroll duplicates
+      setItems(prevItems => {
+        if (!append) return itemsArray;
+        const existingIds = new Set(prevItems.map(it => it.id));
+        const newItems = itemsArray.filter(it => !existingIds.has(it.id));
+        return [...prevItems, ...newItems];
+      });
+      const total = data.total || 0;
+      setTotalInscriptions(total);
+      // Use the Hiro API limit (typically 60) for offset advancement, not filtered count
+      const pageSize = data.limit || 60;
+      const newOffset = offset + pageSize;
       setCurrentOffset(newOffset);
-      const more = newOffset < (data.total || 0);
+      // More pages exist if we haven't paged past the Hiro total
+      const more = newOffset < total;
       setHasMore(more);
 
+      // If this page returned 0 items after filtering but there are more pages,
+      // automatically fetch the next page so we don't stall
+      if (itemsArray.length === 0 && more) {
+        load(newOffset, true);
+        return; // skip setLoading(false) — the next load call handles it
+      }
+
       if (!append) {
-        setDisplayCount(ITEMS_PER_PAGE); // Reset to first page on fresh load
+        setDisplayCount(200); // Show all loaded items on fresh load
       }
 
       setLoading(false);
@@ -408,7 +424,7 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
         }}>
           <div style={{ marginBottom: '8px', fontSize: '16px' }}>✓ All ordinals loaded</div>
           <div>
-            Showing all {totalInscriptions} inscriptions
+            Showing all {items.length} inscriptions
           </div>
         </div>
       )}

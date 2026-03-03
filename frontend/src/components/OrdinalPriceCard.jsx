@@ -36,7 +36,7 @@ export default function OrdinalPriceCard({ inscription, isSelected, onSelect }) 
 
       {/* Ordinal media */}
       <div className="ordinal-media-container">
-        <OrdinalMedia id={inscription.id} contentType={inscription.content_type} />
+        <OrdinalMedia id={inscription.id} contentType={inscription.content_type} contentUri={inscription.content_uri} previewUri={inscription.preview_uri} offchainImage={inscription.offchain_image} collectionName={inscription.collection_name} />
       </div>
 
       {/* Click to select hint */}

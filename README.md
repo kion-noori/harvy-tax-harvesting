@@ -97,7 +97,3 @@ Inscription inputs are ordered first (before funding inputs) to preserve ordinal
 ## Status
 
 This is an MVP under active development.
-
-## License
-
-Private — All Rights Reserved

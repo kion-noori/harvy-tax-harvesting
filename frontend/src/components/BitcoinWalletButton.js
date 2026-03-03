@@ -70,12 +70,22 @@ function BitcoinWalletButton({ onAddressChange = () => {} }) {
   const connectXverse = async () => {
     try {
       setIsConnecting(true);
-      const response = await request('wallet_connect', {
-        addresses: ['ordinals'],
-        message: 'Connect your wallet to view your Ordinals',
-      });
+      const response = await Promise.race([
+        request('wallet_connect', {
+          addresses: ['ordinals'],
+          message: 'Connect your wallet to view your Ordinals',
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Connection timed out. Please try again.')), 30000)
+        ),
+      ]);
 
-      if (response.status === 'success') {
+      if (
+        response &&
+        response.status === 'success' &&
+        response.result &&
+        Array.isArray(response.result.addresses)
+      ) {
         const ordinalsAddressItem = response.result.addresses.find(
           (address) => address.purpose === 'ordinals'
         );
@@ -83,12 +93,18 @@ function BitcoinWalletButton({ onAddressChange = () => {} }) {
         if (ordinalsAddressItem) {
           const addr = ordinalsAddressItem.address;
           const pubKey = ordinalsAddressItem.publicKey || '';
-          console.log('Xverse ordinals address item:', JSON.stringify(ordinalsAddressItem));
-          console.log('Xverse ordinals publicKey:', pubKey);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Xverse ordinals address item:', JSON.stringify(ordinalsAddressItem));
+            console.log('Xverse ordinals publicKey:', pubKey);
+          }
           setBtcAddress(addr);
           setConnectedWallet('xverse');
-          if (typeof onAddressChange === 'function') onAddressChange(addr, 'xverse', pubKey);
+          if (typeof onAddressChange === 'function') {
+            onAddressChange(addr, 'xverse', pubKey);
+          }
         }
+      } else if (process.env.NODE_ENV === 'development') {
+        console.warn('Unexpected Xverse response:', response);
       }
     } catch (error) {
       console.error('Error connecting to Xverse:', error);
@@ -101,13 +117,19 @@ function BitcoinWalletButton({ onAddressChange = () => {} }) {
   const connectUnisat = async () => {
     try {
       setIsConnecting(true);
+      if (typeof window === 'undefined' || !window.unisat) {
+        throw new Error('Unisat extension not found');
+      }
+
       const accounts = await window.unisat.requestAccounts();
 
       if (accounts && accounts.length > 0) {
         const addr = accounts[0];
         setBtcAddress(addr);
         setConnectedWallet('unisat');
-        if (typeof onAddressChange === 'function') onAddressChange(addr, 'unisat');
+        if (typeof onAddressChange === 'function') {
+          onAddressChange(addr, 'unisat', '');
+        }
       }
     } catch (error) {
       console.error('Error connecting to Unisat:', error);
@@ -120,6 +142,10 @@ function BitcoinWalletButton({ onAddressChange = () => {} }) {
   const connectLeather = async () => {
     try {
       setIsConnecting(true);
+      if (typeof window === 'undefined' || !window.LeatherProvider) {
+        throw new Error('Leather wallet provider not found');
+      }
+
       const response = await window.LeatherProvider.request('getAddresses');
 
       if (response && response.result && response.result.addresses) {
@@ -132,7 +158,9 @@ function BitcoinWalletButton({ onAddressChange = () => {} }) {
           const addr = ordinalsAddr.address;
           setBtcAddress(addr);
           setConnectedWallet('leather');
-          if (typeof onAddressChange === 'function') onAddressChange(addr, 'leather');
+          if (typeof onAddressChange === 'function') {
+            onAddressChange(addr, 'leather', '');
+          }
         }
       }
     } catch (error) {
@@ -179,7 +207,9 @@ function BitcoinWalletButton({ onAddressChange = () => {} }) {
     // Clear state
     setBtcAddress('');
     setConnectedWallet('');
-    if (typeof onAddressChange === 'function') onAddressChange('');
+    if (typeof onAddressChange === 'function') {
+      onAddressChange('', '', '');
+    }
     setIsDropdownVisible(false);
   };
 
@@ -207,6 +237,7 @@ function BitcoinWalletButton({ onAddressChange = () => {} }) {
       }
       if (walletSelectorRef.current && !walletSelectorRef.current.contains(event.target)) {
         setIsWalletSelectorVisible(false);
+        setIsConnecting(false);
       }
     }
 
@@ -313,7 +344,13 @@ function BitcoinWalletButton({ onAddressChange = () => {} }) {
               >
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(btcAddress);
+                    navigator.clipboard
+                      .writeText(btcAddress)
+                      .catch((error) => {
+                        if (process.env.NODE_ENV === 'development') {
+                          console.warn('Failed to copy address:', error);
+                        }
+                      });
                     setIsDropdownVisible(false);
                   }}
                   style={{
@@ -539,7 +576,10 @@ function BitcoinWalletButton({ onAddressChange = () => {} }) {
             </div>
 
             <button
-              onClick={() => setIsWalletSelectorVisible(false)}
+              onClick={() => {
+                setIsWalletSelectorVisible(false);
+                setIsConnecting(false);
+              }}
               style={{
                 marginTop: '24px',
                 width: '100%',

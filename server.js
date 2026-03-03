@@ -11,7 +11,6 @@ import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import NodeCache from 'node-cache';
-import * as bitcoin from 'bitcoinjs-lib';
 import {
   calculateServiceFee,
   usdToSats,
@@ -19,6 +18,7 @@ import {
   createOrdinalPurchasePSBT,
   createBatchedOrdinalPurchasePSBT,
   broadcastPSBT,
+  validatePsbtForHarvySafety,
 } from './psbt-utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -35,7 +35,8 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
-      connectSrc: ["'self'", "https://api.hiro.so", "https://ordinals.com", "https://blockchain.info", "https://api-mainnet.magiceden.dev"],
+      connectSrc: ["'self'", "https://api.hiro.so", "https://ordinals.com", "https://ord-mirror.magiceden.dev", "https://blockchain.info", "https://api-mainnet.magiceden.dev"],
+      frameSrc: ["'self'", "https://ordinals.com", "https://ord-mirror.magiceden.dev"],
       objectSrc: ["'self'", "data:", "blob:"],
     },
   },
@@ -123,6 +124,44 @@ async function tryFetch(url, opts = {}) {
   return r;
 }
 
+// Server-side BTC price fetching with short-term caching
+async function fetchBtcPriceFromApi() {
+  const url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
+  const r = await tryFetch(url, { headers: { Accept: 'application/json' } });
+  const json = await r.json();
+  const price = json?.bitcoin?.usd;
+
+  if (!price || price <= 0 || price > 1000000) {
+    throw new Error('Received invalid BTC price from upstream');
+  }
+
+  return price;
+}
+
+async function getBtcPriceUSD() {
+  const cacheKey = 'btcPriceUSD';
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const price = await fetchBtcPriceFromApi();
+    // Cache for 60 seconds to avoid hammering upstream
+    cache.set(cacheKey, price, 60);
+    return price;
+  } catch (e) {
+    console.error('BTC price fetch failed:', e.message);
+    const fallback = parseFloat(process.env.DEFAULT_BTC_PRICE_USD || '0');
+    if (!fallback) {
+      throw e;
+    }
+    console.warn('Using fallback DEFAULT_BTC_PRICE_USD from env');
+    cache.set(cacheKey, fallback, 60);
+    return fallback;
+  }
+}
+
 /* -------------------------------- Routes -------------------------------- */
 
 app.get('/test', (_req, res) => {
@@ -131,7 +170,7 @@ app.get('/test', (_req, res) => {
 
 /**
  * GET /api/ordinals?address=<bc1p...>&offset=0&excludeBrc20=true
- * Lists inscriptions owned by a Taproot address (via Hiro).
+ * Lists inscriptions owned by a Taproot address (via Magic Eden).
  * Uses in-memory caching to reduce API calls.
  */
 app.get('/api/ordinals', strictLimiter, async (req, res) => {
@@ -163,63 +202,44 @@ app.get('/api/ordinals', strictLimiter, async (req, res) => {
   }
 
   try {
+    // Magic Eden requires limit to be a multiple of 20 (min 20, max 100)
+    const meLimit = 100;
+    const headers = { Accept: 'application/json' };
+    if (process.env.MAGICEDEN_API_KEY) {
+      headers['Authorization'] = `Bearer ${process.env.MAGICEDEN_API_KEY}`;
+    }
+
     const r = await tryFetch(
-      `https://api.hiro.so/ordinals/v1/inscriptions?address=${encodeURIComponent(address)}&limit=60&offset=${offset}`,
-      { headers: { Accept: 'application/json' } },
+      `https://api-mainnet.magiceden.dev/v2/ord/btc/tokens?ownerAddress=${encodeURIComponent(address)}&showAll=true&limit=${meLimit}&offset=${offset}`,
+      { headers },
     );
     const json = await r.json();
 
-    let results = json.results || [];
+    // Magic Eden returns { tokens: [...], total?: number } or an array
+    let results = Array.isArray(json) ? json : (json.tokens || []);
+    const totalFromAPI = json.total || results.length;
 
-    // Optionally filter out BRC-20 tokens (text/plain) to show only actual ordinals (images, etc.)
-    if (excludeBrc20) {
-      results = results.filter((it) => {
-        const contentType = it.content_type || '';
-        // Keep non-text items (images, videos, etc.) and exclude text-based BRC-20 tokens
-        return !contentType.startsWith('text/plain');
-      });
-      console.log(`Filtered ${json.results.length} inscriptions to ${results.length} (excluded ${json.results.length - results.length} BRC-20 tokens)`);
-    }
-
-    // Cross-check against live UTXOs to filter out inscriptions that have been spent.
-    // The Hiro indexer can be slow to update, so an inscription may still appear
-    // in the API even after the UTXO has been spent on-chain.
-    try {
-      const mempoolAPI = process.env.MEMPOOL_API_URL || 'https://mempool.space/api';
-      const utxoResponse = await tryFetch(`${mempoolAPI}/address/${address}/utxo`);
-      const utxos = await utxoResponse.json();
-      const utxoSet = new Set(utxos.map(u => `${u.txid}:${u.vout}`));
-
-      const beforeCount = results.length;
-      results = results.filter((it) => {
-        // Inscription ID format: <txid>i<vout>
-        const parts = it.id.split('i');
-        if (parts.length !== 2) return true; // Keep if we can't parse
-        const utxoKey = `${parts[0]}:${parts[1]}`;
-        return utxoSet.has(utxoKey);
-      });
-
-      if (beforeCount !== results.length) {
-        console.log(`UTXO check: filtered ${beforeCount} → ${results.length} (removed ${beforeCount - results.length} spent inscriptions)`);
-      }
-    } catch (utxoErr) {
-      // If UTXO fetch fails, continue with unfiltered results (graceful degradation)
-      console.warn('UTXO cross-check failed, showing unfiltered results:', utxoErr.message);
-    }
+    // Note: No content-type filtering — show all inscriptions so users can decide what to sell.
+    // Magic Eden's preview URIs handle rendering for all types including BRC-20 and JSON inscriptions.
 
     const items = results.map((it) => ({
       id: it.id,
-      number: it.number,
-      content_type: it.content_type || null,
-      content_uri: `/api/ordinal-bytes/${it.id}`,
-      preview_uri: `/api/ordinal-bytes/${it.id}`,
+      number: it.inscriptionNumber ?? it.number,
+      content_type: it.contentType || it.content_type || null,
+      content_uri: it.contentURI || `/api/ordinal-bytes/${it.id}`,
+      preview_uri: it.contentPreviewURI || it.contentURI || `/api/ordinal-bytes/${it.id}`,
+      offchain_image: it.meta?.high_res_img_url || null,
+      collection_name: it.collection?.name || null,
+      display_name: it.displayName || it.meta?.name || null,
+      output: it.output || null,
     }));
 
     const response = {
       items,
-      total: json.total,
-      limit: json.limit,
-      offset: json.offset,
+      total: totalFromAPI,
+      limit: meLimit,
+      offset: offset,
+      filteredCount: items.length,
     };
 
     // Store in cache
@@ -255,9 +275,23 @@ app.get('/api/ordinals', strictLimiter, async (req, res) => {
 });
 
 /**
+ * GET /api/btc-price
+ * Returns the current BTC/USD price from the backend (cached briefly).
+ */
+app.get('/api/btc-price', async (_req, res) => {
+  try {
+    const price = await getBtcPriceUSD();
+    return res.json({ priceUSD: price });
+  } catch (e) {
+    console.error('BTC price endpoint error:', e.message);
+    return res.status(502).json({ error: 'Failed to fetch BTC price' });
+  }
+});
+
+/**
  * GET /api/ordinal-meta/:id
  * Returns { id, number, content_type }.
- * Uses Hiro; if missing content_type, probes content endpoints with HEAD.
+ * Uses Magic Eden; falls back to ordinals.com HEAD probe.
  * Cached for 24 hours since metadata rarely changes.
  */
 app.get('/api/ordinal-meta/:id', async (req, res) => {
@@ -273,36 +307,37 @@ app.get('/api/ordinal-meta/:id', async (req, res) => {
   }
 
   try {
-    // 1) Try Hiro JSON
+    // 1) Try Magic Eden
     let number = null;
     let contentType = null;
 
     try {
-      const r = await fetch(`https://api.hiro.so/ordinals/v1/inscriptions/${id}`, {
-        headers: { Accept: 'application/json' },
+      const meHeaders = { Accept: 'application/json' };
+      if (process.env.MAGICEDEN_API_KEY) {
+        meHeaders['Authorization'] = `Bearer ${process.env.MAGICEDEN_API_KEY}`;
+      }
+      const r = await fetch(`https://api-mainnet.magiceden.dev/v2/ord/btc/tokens?tokenIds=${encodeURIComponent(id)}`, {
+        headers: meHeaders,
       });
       if (r.ok) {
-        const j = await r.json();
-        number = j.number ?? null;
-        contentType = j.content_type || null;
+        const data = await r.json();
+        const token = Array.isArray(data) ? data[0] : (data.tokens || [])[0];
+        if (token) {
+          number = token.inscriptionNumber ?? null;
+          contentType = token.contentType || null;
+        }
       }
     } catch {}
 
-    // 2) If unknown, probe candidates with HEAD to infer type
+    // 2) If unknown, probe ordinals.com with HEAD to infer type
     if (!contentType) {
-      const candidates = [
-        `https://api.hiro.so/ordinals/v1/inscriptions/${id}/content`,
-        `https://ordinals.com/content/${id}`,
-      ];
-      for (const url of candidates) {
-        try {
-          const head = await fetch(url, { method: 'HEAD' });
-          if (head.ok) {
-            const t = head.headers.get('content-type');
-            if (t) { contentType = t; break; }
-          }
-        } catch {}
-      }
+      try {
+        const head = await fetch(`https://ordinals.com/content/${id}`, { method: 'HEAD' });
+        if (head.ok) {
+          const t = head.headers.get('content-type');
+          if (t) { contentType = t; }
+        }
+      } catch {}
     }
 
     const result = {
@@ -519,10 +554,9 @@ app.get('/api/ordinal-value/:id', async (req, res) => {
  */
 app.get('/api/ordinal-bytes/:id', async (req, res) => {
   const { id } = req.params;
-  // Try ordinals.com first - Hiro API has aggressive rate limiting
+  // ordinals.com is the canonical source for inscription content
   const candidates = [
     `https://ordinals.com/content/${id}`,
-    `https://api.hiro.so/ordinals/v1/inscriptions/${id}/content`,
   ];
 
   const maxRetries = 2;
@@ -609,7 +643,7 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
     sellerPaymentUTXOs = [],
     purchasePriceSats,
     currentPriceSats,
-    btcPriceUSD,
+    btcPriceUSD: _clientBtcPriceUSD,
     userTaxRate // User-provided tax rate (decimal, e.g., 0.30 for 30%)
   } = req.body;
 
@@ -622,9 +656,9 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
   });
 
   // Validation
-  if (!inscriptionId || !sellerAddress || !purchasePriceSats || !btcPriceUSD) {
+  if (!inscriptionId || !sellerAddress || !purchasePriceSats) {
     return res.status(400).json({
-      error: 'Missing required fields: inscriptionId, sellerAddress, purchasePriceSats, btcPriceUSD'
+      error: 'Missing required fields: inscriptionId, sellerAddress, purchasePriceSats'
     });
   }
 
@@ -636,6 +670,9 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
   }
 
   try {
+    // Always use server-side BTC price (ignore client-provided value)
+    const btcPriceUSD = await getBtcPriceUSD();
+
     // Get Harvy's wallet address from environment variable
     const harvyAddress = process.env.HARVY_WALLET_ADDRESS;
     if (!harvyAddress) {
@@ -659,8 +696,8 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
     }
 
     if (!btcPriceUSD || btcPriceUSD <= 0 || btcPriceUSD > 10000000) {
-      return res.status(400).json({
-        error: 'Invalid BTC price: must be between $1 and $10,000,000'
+      return res.status(500).json({
+        error: 'Server BTC price is out of expected range. Please try again later.'
       });
     }
 
@@ -789,7 +826,7 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
     console.error(e.stack);
     return res.status(500).json({
       error: 'Failed to create PSBT offer',
-      details: e.message
+      details: process.env.NODE_ENV === 'development' ? e.message : undefined
     });
   }
 });
@@ -810,7 +847,7 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
     ordinals,
     sellerAddress,
     sellerPublicKey,
-    btcPriceUSD,
+    btcPriceUSD: _clientBtcPriceUSD,
     userTaxRate
   } = req.body;
 
@@ -819,7 +856,6 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
     sellerAddress: sellerAddress?.slice(0, 20) + '...',
     sellerPublicKey: sellerPublicKey || '(empty/missing)',
     sellerPublicKeyLength: sellerPublicKey?.length || 0,
-    btcPriceUSD
   });
 
   // Validation
@@ -835,9 +871,9 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
     });
   }
 
-  if (!sellerAddress || !btcPriceUSD) {
+  if (!sellerAddress) {
     return res.status(400).json({
-      error: 'Missing required fields: sellerAddress, btcPriceUSD'
+      error: 'Missing required field: sellerAddress'
     });
   }
 
@@ -848,6 +884,8 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
   }
 
   try {
+    // Always use server-side BTC price (ignore client-provided value)
+    const btcPriceUSD = await getBtcPriceUSD();
     const harvyAddress = process.env.HARVY_WALLET_ADDRESS;
     if (!harvyAddress || !process.env.HARVY_WALLET_PRIVATE_KEY) {
       return res.status(500).json({
@@ -939,7 +977,7 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
     console.error('❌ Batch PSBT creation error:', e.message);
     return res.status(500).json({
       error: 'Failed to create batch PSBT',
-      details: e.message
+      details: process.env.NODE_ENV === 'development' ? e.message : undefined
     });
   }
 });
@@ -962,22 +1000,19 @@ app.post('/api/finalize-psbt', transactionLimiter, async (req, res) => {
   }
 
   try {
-    // TODO: CRITICAL SECURITY - PROFESSIONAL AUDIT REQUIRED BEFORE MAINNET
-    // This endpoint broadcasts transactions with ZERO validation!
-    // Required before mainnet:
-    // 1. Parse and validate the PSBT structure
-    // 2. Verify all expected outputs are present and correct
-    // 3. Verify no unexpected outputs exist
-    // 4. Check that Harvy's wallet won't lose more than expected
-    // 5. Implement transaction amount limits (e.g., max $1000/tx)
-    // 6. Add manual approval queue for large transactions
-    // 7. Rate limiting per user address (prevent rapid-fire attacks)
-    // WITHOUT THESE CHECKS, THIS IS A CRITICAL VULNERABILITY
-    // Estimated risk: CRITICAL - could drain entire wallet in seconds
+    // SECURITY: Validate PSBT structure and economic invariants before broadcast.
+    // This is a conservative, opinionated guardrail based on Harvy's own PSBT
+    // construction patterns. It does NOT replace a professional audit for mainnet.
+    validatePsbtForHarvySafety(psbtBase64);
 
     const txid = await broadcastPSBT(psbtBase64);
 
     console.log(`✅ Transaction broadcast successfully: ${txid}`);
+
+    // Clear ordinals cache so sold inscriptions disappear immediately
+    const cacheKeys = cache.keys().filter(k => k.startsWith('ordinals:'));
+    cacheKeys.forEach(k => cache.del(k));
+    console.log(`🗑️  Cleared ${cacheKeys.length} ordinals cache entries after broadcast`);
 
     return res.json({
       success: true,
@@ -990,9 +1025,12 @@ app.post('/api/finalize-psbt', transactionLimiter, async (req, res) => {
 
   } catch (e) {
     console.error('❌ Broadcast error:', e.message);
-    return res.status(500).json({
-      error: 'Failed to broadcast transaction',
-      details: e.message
+    const statusCode = e.message && e.message.startsWith('Invalid PSBT')
+      ? 400
+      : 500;
+    return res.status(statusCode).json({
+      error: statusCode === 400 ? e.message : 'Failed to broadcast transaction',
+      details: process.env.NODE_ENV === 'development' ? e.message : undefined,
     });
   }
 });

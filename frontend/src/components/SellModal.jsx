@@ -38,9 +38,14 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
   useEffect(() => {
     async function fetchBTCPrice() {
       try {
-        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/api/btc-price`);
         const data = await response.json();
-        setBtcPriceUSD(data.bitcoin.usd);
+        if (response.ok && typeof data.priceUSD === 'number') {
+          setBtcPriceUSD(data.priceUSD);
+        } else {
+          throw new Error(data.error || 'Invalid BTC price response');
+        }
         setLoadingPrice(false);
       } catch (err) {
         console.error('Failed to fetch BTC price:', err);
@@ -251,7 +256,8 @@ guidance on reporting cryptocurrency transactions.
       console.log('SellModal: btcPublicKey being sent to backend:', btcPublicKey, 'length:', btcPublicKey?.length);
 
       // Create SINGLE batched PSBT for all ordinals
-      const response = await fetch('http://localhost:3001/api/create-batch-psbt', {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/create-batch-psbt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -266,7 +272,8 @@ guidance on reporting cryptocurrency transactions.
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to create batch transaction');
+        const detail = data.details ? `: ${data.details}` : '';
+        throw new Error((data.error || 'Failed to create batch transaction') + detail);
       }
 
       // Sign PSBT (single signature for all ordinals!)
@@ -311,7 +318,7 @@ guidance on reporting cryptocurrency transactions.
 
       // Broadcast single transaction
       setProcessingStep('Broadcasting...');
-      const broadcastResponse = await fetch('http://localhost:3001/api/finalize-psbt', {
+      const broadcastResponse = await fetch(`${apiUrl}/api/finalize-psbt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -328,17 +335,15 @@ guidance on reporting cryptocurrency transactions.
 
       // Success - single transaction for all ordinals
       setProcessingStep('success');
+      setIsProcessing(false);
       setTxResult({
         txid: broadcastData.txid,
         explorerUrl: broadcastData.explorerUrl,
         ordinalCount: selectedOrdinals.length,
         totals,
       });
-
-      // Call parent handler with all inscription IDs
-      if (onSaleComplete) {
-        onSaleComplete(selectedOrdinals.map(o => o.inscription.id));
-      }
+      // NOTE: Don't call onSaleComplete here — let the user see the success
+      // screen and download their receipt first. It's called when they click "Done".
 
     } catch (err) {
       console.error('Sale failed:', err);
@@ -536,7 +541,12 @@ guidance on reporting cryptocurrency transactions.
                     View on Explorer
                   </a>
                 )}
-                <button className="btn-done" onClick={onClose}>
+                <button className="btn-done" onClick={() => {
+                  if (onSaleComplete) {
+                    onSaleComplete(selectedOrdinals.map(o => o.inscription.id));
+                  }
+                  onClose();
+                }}>
                   Done
                 </button>
               </div>

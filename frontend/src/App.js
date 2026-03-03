@@ -151,8 +151,16 @@ export default function App() {
                     a: "Yes. We use atomic swaps (PSBTs) so your private keys never leave your wallet. There is no custody and no counterparty risk."
                   },
                   {
+                    q: "Should I use Harvy for every loss?",
+                    a: "Not necessarily. If you don't need an on-chain sale footprint for tax or recordkeeping purposes, you can often just consolidate UTXOs and reuse the sats as regular Bitcoin. Harvy is designed for situations where you and your tax advisor want a clear on-chain sale record for underwater Ordinals."
+                  },
+                  {
                     q: "What wallets are supported?",
                     a: "We currently support Xverse, Unisat, and Leather wallets on Bitcoin mainnet."
+                  },
+                  {
+                    q: "Is this tax or legal advice?",
+                    a: "No. Harvy does not provide tax, legal, or accounting advice. We generate on-chain transactions and a detailed receipt, but you are responsible for how you report these transactions. Always consult a qualified tax professional for advice specific to your situation."
                   }
                 ].map((item, i) => (
                   <details key={i} className="faq-detail">

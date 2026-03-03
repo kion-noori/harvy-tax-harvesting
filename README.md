@@ -97,3 +97,7 @@ Inscription inputs are ordered first (before funding inputs) to preserve ordinal
 ## Status
 
 This is an MVP under active development.
+
+## Tooling
+
+This project was built with heavy assistance from the **Cursor IDE** as an AI pair programmer (for both frontend React work and backend PSBT / security logic).*** End Patch```} ***!

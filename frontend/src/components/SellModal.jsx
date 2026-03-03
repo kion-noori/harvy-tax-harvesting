@@ -483,6 +483,12 @@ guidance on reporting cryptocurrency transactions.
                 <span>Your Net Benefit</span>
                 <span className="benefit-total">${totals.netBenefitUSD.toFixed(2)}</span>
               </div>
+              <div className="benefit-row" style={{ fontSize: '12px', color: '#a0a4b8', marginTop: '8px' }}>
+                <span>In plain English</span>
+                <span>
+                  You&apos;ll receive {totals.paymentSats.toLocaleString()} sats and an estimated net tax benefit of ${totals.netBenefitUSD.toFixed(2)} after Harvy&apos;s fee.
+                </span>
+              </div>
             </div>
           </>
         )}
@@ -491,6 +497,11 @@ guidance on reporting cryptocurrency transactions.
         <div className="modal-warning">
           <strong>Note:</strong> This sale is final. Once you sign the transaction{selectedOrdinals.length > 1 ? 's' : ''},
           the ordinal{selectedOrdinals.length !== 1 ? 's' : ''} will be transferred to Harvy.
+          <br />
+          <br />
+          <strong>Important:</strong> Harvy does not provide tax, legal, or accounting advice. We generate on-chain
+          transactions and a detailed receipt, but you are responsible for how you report these transactions. Always
+          consult a qualified tax professional for advice specific to your situation.
         </div>
 
         {/* Processing Overlay */}

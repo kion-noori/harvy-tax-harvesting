@@ -8,7 +8,7 @@ Most crypto tax tools tell you *what* you owe. None of them help you *reduce* wh
 
 ## The Solution
 
-Harvy buys your underwater Ordinals directly — no listings, no waiting, no counterparty risk. You connect your wallet, see which Ordinals are at a loss, and sell them to Harvy in a single atomic transaction. You realize the capital loss instantly, and Harvy gives you a downloadable receipt you can use at tax time.
+Harvy buys your underwater Ordinals directly — no listings, no waiting, no counterparty risk. You connect your wallet, select the ordinals you want to sell, manually enter your cost basis, and sell them to Harvy in a single atomic transaction. Harvy records the on-chain sale and gives you a downloadable receipt you can use with your tax records.
 
 - **Instant liquidity** — Sell losing Ordinals in one click. No marketplace, no buyers needed.
 - **You keep the savings** — Harvy charges a small fee (5-15%) on the tax benefit. You keep the rest.
@@ -16,15 +16,15 @@ Harvy buys your underwater Ordinals directly — no listings, no waiting, no cou
 
 ## How It Works
 
-1. **Connect your wallet** — Harvy supports Xverse, Unisat, and Leather. No signup, no account creation.
-2. **Review your Ordinals** — See your portfolio with current values and unrealized gains/losses.
-3. **Select and sell** — Pick the Ordinals you want to harvest losses on. Harvy handles the atomic swap and gives you a downloadable tax loss receipt.
+1. **Connect your wallet** — Harvy supports wallet connections without signup or account creation.
+2. **Review your Ordinals** — Choose the ordinals you want to sell and enter your original purchase price manually.
+3. **Select and sell** — Harvy handles the atomic swap and gives you a downloadable receipt documenting the sale proceeds.
 
 ## Running Locally
 
 ### Prerequisites
 - Node.js 18+
-- A Bitcoin wallet browser extension (Xverse, Unisat, or Leather)
+- A Bitcoin wallet browser extension
 
 ### Setup
 
@@ -103,9 +103,9 @@ All outputs are standard (decodeable) and dust-padded (min 546 sats) where appli
 
 ## Status
 
-**Working:** Multi-wallet connect (Xverse, Unisat, Leather); Ordinals list with infinite scroll and Magic Eden data; batched PSBT create/sign/broadcast with FIFO ordering; server-side BTC price and fee/tax math; pre-broadcast PSBT validation; downloadable tax receipt; one confirmed mainnet tx in the wild.
+**Working:** Multi-wallet connect (Xverse, Unisat, Leather); Xverse-first batched PSBT create/sign/broadcast with FIFO ordering; server-side BTC price and fee/tax math; pre-broadcast PSBT validation; downloadable tax receipt; one confirmed mainnet tx in the wild.
 
-**Next (technical roadmap):** Dynamic fee rate from Mempool API; optional PSBT validation tightening (e.g. cross-check output amounts vs create-batch-psbt params); broader testnet/mainnet runs and edge-case hardening.
+**Next (technical roadmap):** Broader Xverse testing; Unisat/Leather sell-path hardening; dynamic fee rate from Mempool API; broader edge-case hardening.
 
 ## Tooling
 

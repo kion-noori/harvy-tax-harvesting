@@ -238,7 +238,7 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔌</div>
         <h2 style={{ color: '#fff', marginBottom: '12px', fontSize: '24px' }}>No Wallet Connected</h2>
         <p style={{ color: '#aaa', fontSize: '16px', lineHeight: '1.6' }}>
-          Connect your Xverse wallet using the button in the top right to view your Ordinals portfolio.
+          Connect your wallet using the button in the top right to view your Ordinals portfolio.
         </p>
       </div>
     );
@@ -306,7 +306,7 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
               <div className="step-number">2</div>
               <div className="step-content">
                 <strong>Enter purchase prices</strong>
-                <span>Tell us what you paid for each one</span>
+                <span>Enter your own cost basis for each ordinal</span>
               </div>
             </div>
             <div className="onboarding-step">

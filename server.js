@@ -6,6 +6,7 @@ import 'dotenv/config'; // Load environment variables from .env
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
+import fs from 'fs';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
@@ -27,6 +28,7 @@ const __dirname = dirname(__filename);
 const PORT = process.env.PORT || 3001;
 const app = express();
 const BITCOIN_NETWORK = process.env.BITCOIN_NETWORK || 'mainnet';
+const TRANSACTION_LOG_PATH = path.join(__dirname, 'transaction-events.ndjson');
 
 // Security headers
 app.use(helmet({
@@ -126,6 +128,20 @@ async function tryFetch(url, opts = {}) {
     throw err;
   }
   return r;
+}
+
+function logTransactionEvent(eventType, payload = {}) {
+  try {
+    const line = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      network: BITCOIN_NETWORK,
+      eventType,
+      ...payload,
+    });
+    fs.appendFileSync(TRANSACTION_LOG_PATH, `${line}\n`, 'utf8');
+  } catch (e) {
+    console.error('Transaction event log write failed:', e.message);
+  }
 }
 
 // Server-side BTC price fetching with short-term caching
@@ -365,12 +381,12 @@ app.get('/api/ordinal-meta/:id', async (req, res) => {
 /**
  * GET /api/ordinal-activity/:id
  * Fetches transaction/activity history for a specific inscription from Magic Eden.
- * Returns purchase price, sale history, etc.
+ * Returns purchase history metadata for optional UI assistance.
  */
 app.get('/api/ordinal-activity/:id', async (req, res) => {
   const { id } = req.params;
 
-  // Check cache first (cache for 5 minutes since activity changes)
+  // Check cache first (cache for 5 minutes since activity can change)
   const cacheKey = `activity:${id}`;
   const cached = cache.get(cacheKey);
   if (cached) {
@@ -443,8 +459,7 @@ app.get('/api/ordinal-activity/:id', async (req, res) => {
       lastPurchaseDate: lastPurchase?.createdAt || null,
     };
 
-    // Cache for 24 hours (prices don't change much in dead market)
-    cache.set(cacheKey, result, 86400);
+    cache.set(cacheKey, result, 300);
 
     res.setHeader('X-Cache', 'MISS');
     res.setHeader('Cache-Control', 'public, max-age=300');
@@ -468,12 +483,12 @@ app.get('/api/ordinal-activity/:id', async (req, res) => {
 /**
  * GET /api/ordinal-value/:id
  * Fetches current listing price and market data for a specific inscription from Magic Eden.
- * Used to calculate current value vs purchase price for tax harvesting.
+ * Used only for optional market context in the UI.
  */
 app.get('/api/ordinal-value/:id', async (req, res) => {
   const { id } = req.params;
 
-  // Check cache first (cache for 5 minutes since prices change)
+  // Check cache first (cache for 5 minutes since prices can change)
   const cacheKey = `value:${id}`;
   const cached = cache.get(cacheKey);
   if (cached) {
@@ -526,8 +541,7 @@ app.get('/api/ordinal-value/:id', async (req, res) => {
       isListed: listedPriceSats !== null && listedPriceSats !== undefined,
     };
 
-    // Cache for 24 hours (prices don't change much in dead market)
-    cache.set(cacheKey, result, 86400);
+    cache.set(cacheKey, result, 300);
 
     res.setHeader('X-Cache', 'MISS');
     res.setHeader('Cache-Control', 'public, max-age=300');
@@ -946,6 +960,16 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
     }
 
     console.log(`💰 Batch: ${ordinals.length} ordinals, Loss=$${totalLossUSD}, Savings=$${taxSavingsUSD}, Fee=$${feeInfo.feeUSD}`);
+    logTransactionEvent('create_batch_psbt_requested', {
+      sellerAddress,
+      ordinalCount: ordinals.length,
+      inscriptionIds: ordinals.map(ord => ord.inscriptionId),
+      totalPurchaseSats,
+      totalOfferSats,
+      totalLossSats,
+      serviceFeeSats,
+      taxRate,
+    });
 
     // Create batched PSBT
     const psbtResult = await createBatchedOrdinalPurchasePSBT({
@@ -988,6 +1012,12 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
 
   } catch (e) {
     console.error('❌ Batch PSBT creation error:', e.message);
+    logTransactionEvent('create_batch_psbt_failed', {
+      sellerAddress,
+      ordinalCount: ordinals?.length || 0,
+      inscriptionIds: Array.isArray(ordinals) ? ordinals.map(ord => ord.inscriptionId).filter(Boolean) : [],
+      error: e.message,
+    });
     return res.status(500).json({
       error: 'Failed to create batch PSBT',
       details: process.env.NODE_ENV === 'development' ? e.message : undefined
@@ -1021,6 +1051,10 @@ app.post('/api/finalize-psbt', transactionLimiter, async (req, res) => {
     const txid = await broadcastPSBT(psbtString);
 
     console.log(`✅ Transaction broadcast successfully: ${txid}`);
+    logTransactionEvent('finalize_psbt_succeeded', {
+      txid,
+      psbtLength: psbtString.length,
+    });
 
     // Clear ordinals cache so sold inscriptions disappear immediately
     const cacheKeys = cache.keys().filter(k => k.startsWith('ordinals:'));
@@ -1031,13 +1065,17 @@ app.post('/api/finalize-psbt', transactionLimiter, async (req, res) => {
       success: true,
       txid,
       message: 'Transaction broadcast to the Bitcoin network',
-      explorerUrl: process.env.BITCOIN_NETWORK === 'mainnet'
+      explorerUrl: BITCOIN_NETWORK === 'mainnet'
         ? `https://mempool.space/tx/${txid}`
         : `https://mempool.space/testnet/tx/${txid}`
     });
 
   } catch (e) {
     console.error('❌ Broadcast error:', e.message);
+    logTransactionEvent('finalize_psbt_failed', {
+      error: e.message,
+      psbtLength: psbtString.length,
+    });
     const statusCode = e.message && e.message.startsWith('Invalid PSBT')
       ? 400
       : 500;

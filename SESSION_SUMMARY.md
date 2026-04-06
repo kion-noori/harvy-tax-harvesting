@@ -1,5 +1,7 @@
 # Development Session Summary
 
+Superseded by [PROJECT_STATUS.md](/Users/kionnoori/my-nft-project/PROJECT_STATUS.md) for current-state reference. Keep this file as historical context only.
+
 **Date:** December 23, 2025
 **Focus:** MVP Preparation for Harvy - Bitcoin Ordinals Tax Harvesting Platform
 

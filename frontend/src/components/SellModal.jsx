@@ -19,7 +19,7 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
   const [btcPriceUSD, setBtcPriceUSD] = useState(null);
   const [loadingPrice, setLoadingPrice] = useState(true);
 
-  // Initialize purchase prices from localStorage or activity data
+  // Initialize purchase prices from localStorage or prior optional activity data
   useEffect(() => {
     const initialPrices = {};
     selectedOrdinals.forEach(ord => {
@@ -410,9 +410,9 @@ guidance on reporting cryptocurrency transactions.
           {showTaxHelp && (
             <div className="tax-help-tooltip">
               <div style={{ fontWeight: '600', color: '#F7931A', marginBottom: '8px' }}>
-                What is my capital gains tax rate?
+                What belongs here?
               </div>
-              <div>Federal (0-20%) + State (0-13%) for US. Check your country's crypto capital gains rate internationally.</div>
+              <div>Enter your estimated combined tax rate. Harvy records sale proceeds only. Your basis and reporting treatment are your responsibility.</div>
             </div>
           )}
 
@@ -490,6 +490,10 @@ guidance on reporting cryptocurrency transactions.
                 <span>
                   You&apos;ll receive {totals.paymentSats.toLocaleString()} sats and an estimated net tax benefit of ${totals.netBenefitUSD.toFixed(2)} after Harvy&apos;s fee.
                 </span>
+              </div>
+              <div className="benefit-row" style={{ fontSize: '12px', color: '#a0a4b8', marginTop: '8px' }}>
+                <span>Basis Source</span>
+                <span>You entered the purchase prices above. Harvy does not verify them.</span>
               </div>
             </div>
           </>

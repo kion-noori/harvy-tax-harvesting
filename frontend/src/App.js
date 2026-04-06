@@ -73,7 +73,7 @@ export default function App() {
               {!btcAddress ? (
                 <div className="cta-box">
                   <p className="cta-text">Connect your wallet to get started</p>
-                  <p className="cta-subtext">Xverse, Unisat, and Leather supported. No signup required.</p>
+                  <p className="cta-subtext">Connect a wallet to view your ordinals. In-app selling is currently enabled for Xverse. No signup required.</p>
                 </div>
               ) : (
                 <div className="cta-box connected">
@@ -96,14 +96,14 @@ export default function App() {
                   <span className="step-num">01</span>
                   <div className="step-text">
                     <h3>Connect your wallet</h3>
-                    <p>Link Xverse, Unisat, or Leather to view your Ordinals portfolio.</p>
+                    <p>Link your wallet to view your Ordinals portfolio. Xverse is currently the in-app sell path.</p>
                   </div>
                 </div>
                 <div className="step-item">
                   <span className="step-num">02</span>
                   <div className="step-text">
                     <h3>Review your positions</h3>
-                    <p>See purchase prices, current values, and unrealized losses at a glance.</p>
+                    <p>Enter your own cost basis and review the fixed Harvy sale proceeds before selling.</p>
                   </div>
                 </div>
                 <div className="step-item">
@@ -156,7 +156,11 @@ export default function App() {
                   },
                   {
                     q: "What wallets are supported?",
-                    a: "We currently support Xverse, Unisat, and Leather wallets on Bitcoin mainnet."
+                    a: "Wallet connection works for Xverse, Unisat, and Leather on Bitcoin mainnet, and the current in-app sell flow is hardened for Xverse first."
+                  },
+                  {
+                    q: "How is my cost basis determined?",
+                    a: "You enter your original purchase price manually. Harvy records the on-chain sale proceeds, but you are responsible for the accuracy of the basis you provide and how you report it."
                   },
                   {
                     q: "Is this tax or legal advice?",

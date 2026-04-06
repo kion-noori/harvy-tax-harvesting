@@ -72,11 +72,31 @@ export function satsToUSD(sats, btcPriceUSD) {
  * @returns {object} - Bitcoin network object (mainnet or testnet)
  */
 export function getNetwork() {
-  const networkName = process.env.BITCOIN_NETWORK || 'testnet';
+  const networkName = process.env.BITCOIN_NETWORK || 'mainnet';
   if (networkName === 'mainnet') {
     return bitcoin.networks.bitcoin;
   }
   return bitcoin.networks.testnet;
+}
+
+function parsePsbt(psbtString, network) {
+  const trimmed = (psbtString || '').trim();
+
+  if (!trimmed) {
+    throw new Error('Missing PSBT');
+  }
+
+  try {
+    return bitcoin.Psbt.fromBase64(trimmed, { network });
+  } catch {}
+
+  if (/^[0-9a-f]+$/i.test(trimmed)) {
+    try {
+      return bitcoin.Psbt.fromHex(trimmed, { network });
+    } catch {}
+  }
+
+  throw new Error('Invalid PSBT encoding: expected base64 or hex PSBT');
 }
 
 /**
@@ -121,7 +141,7 @@ export function loadHarvyKeyPair() {
  * @returns {Promise<Array>} - Array of UTXO objects
  */
 export async function fetchUTXOs(address) {
-  const mempoolAPI = process.env.MEMPOOL_API_URL || 'https://mempool.space/testnet/api';
+  const mempoolAPI = process.env.MEMPOOL_API_URL || 'https://mempool.space/api';
   const url = `${mempoolAPI}/address/${address}/utxo`;
 
   try {
@@ -263,7 +283,7 @@ export function selectUTXOs(utxos, targetSats, feeEstimate = 1000) {
  * @returns {Promise<string>} - Raw transaction hex
  */
 export async function fetchTransactionHex(txid) {
-  const mempoolAPI = process.env.MEMPOOL_API_URL || 'https://mempool.space/testnet/api';
+  const mempoolAPI = process.env.MEMPOOL_API_URL || 'https://mempool.space/api';
   const url = `${mempoolAPI}/tx/${txid}/hex`;
 
   try {
@@ -726,7 +746,7 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
  */
 export async function broadcastPSBT(psbtBase64) {
   const network = getNetwork();
-  const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network });
+  const psbt = parsePsbt(psbtBase64, network);
 
   // TODO: CRITICAL SECURITY - PROFESSIONAL AUDIT REQUIRED BEFORE MAINNET
   // Basic sanity checks added below, but deep PSBT validation still needed
@@ -803,9 +823,10 @@ export async function broadcastPSBT(psbtBase64) {
   // Extract the final transaction
   const tx = psbt.extractTransaction();
   const txHex = tx.toHex();
+  const txid = tx.getId();
 
   // Broadcast to mempool
-  const mempoolAPI = process.env.MEMPOOL_API_URL || 'https://mempool.space/testnet/api';
+  const mempoolAPI = process.env.MEMPOOL_API_URL || 'https://mempool.space/api';
   const url = `${mempoolAPI}/tx`;
 
   try {
@@ -817,12 +838,21 @@ export async function broadcastPSBT(psbtBase64) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      const normalized = errorText.toLowerCase();
+      if (
+        normalized.includes('txn-already-known') ||
+        normalized.includes('already in block chain') ||
+        normalized.includes('already known')
+      ) {
+        console.warn(`Transaction ${txid} was already broadcast`);
+        return txid;
+      }
       throw new Error(`Broadcast failed: ${response.status} ${errorText}`);
     }
 
-    const txid = await response.text();
-    console.log(`Transaction broadcast successfully: ${txid}`);
-    return txid;
+    const responseTxid = await response.text();
+    console.log(`Transaction broadcast successfully: ${responseTxid}`);
+    return responseTxid || txid;
   } catch (e) {
     throw new Error(`Failed to broadcast transaction: ${e.message}`);
   }
@@ -856,9 +886,9 @@ export function validatePsbtForHarvySafety(psbtBase64) {
 
   let psbt;
   try {
-    psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network });
+    psbt = parsePsbt(psbtBase64, network);
   } catch (e) {
-    throw new Error(`Invalid PSBT encoding: ${e.message}`);
+    throw new Error(e.message);
   }
 
   const inputCount = psbt.data.inputs.length;

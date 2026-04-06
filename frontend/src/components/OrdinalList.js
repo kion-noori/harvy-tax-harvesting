@@ -7,9 +7,8 @@ const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 // Taproot addresses start with bc1p and are typically 62 chars but can vary
 const isTaproot = (s) => {
   const trimmed = (s || '').trim();
-  // Must start with bc1p, followed by valid bech32 characters (0-9 and a-z except b,i,o)
-  // Length: 62-90 characters total
-  return /^bc1p[0-9a-z]{58,86}$/i.test(trimmed);
+  const prefix = (process.env.REACT_APP_BITCOIN_NETWORK || 'mainnet') === 'mainnet' ? 'bc1p' : 'tb1p';
+  return new RegExp(`^${prefix}[0-9a-z]{58,86}$`, 'i').test(trimmed);
 };
 
 export default function OrdinalList({ btcAddress: connectedAddress, walletType, btcPublicKey }) {

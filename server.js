@@ -26,6 +26,7 @@ const __dirname = dirname(__filename);
 
 const PORT = process.env.PORT || 3001;
 const app = express();
+const BITCOIN_NETWORK = process.env.BITCOIN_NETWORK || 'mainnet';
 
 // Security headers
 app.use(helmet({
@@ -110,8 +111,11 @@ console.log('🗑️  Cache cleared on startup');
 
 /* ------------------------------ Utilities ------------------------------ */
 
-// Taproot addresses: bc1p + bech32 characters, typically 62 but can vary (62-90 chars total)
-const TAPROOT_RE = /^bc1p[0-9a-z]{58,86}$/i;
+function isValidTaprootAddress(address) {
+  const trimmed = (address || '').trim();
+  const expectedPrefix = BITCOIN_NETWORK === 'mainnet' ? 'bc1p' : 'tb1p';
+  return new RegExp(`^${expectedPrefix}[0-9a-z]{58,86}$`, 'i').test(trimmed);
+}
 
 async function tryFetch(url, opts = {}) {
   const r = await fetch(url, opts);
@@ -182,12 +186,12 @@ app.get('/api/ordinals', strictLimiter, async (req, res) => {
 
   if (!address) {
     return res.status(400).json({
-      error: 'address is required (Taproot owner address starting with bc1p...)',
+      error: `address is required (Taproot owner address starting with ${BITCOIN_NETWORK === 'mainnet' ? 'bc1p' : 'tb1p'}...)`,
     });
   }
-  if (!TAPROOT_RE.test(address)) {
+  if (!isValidTaprootAddress(address)) {
     return res.status(400).json({
-      error: 'invalid address: must be a Taproot (bc1p...) owner address',
+      error: `invalid address: must be a Taproot (${BITCOIN_NETWORK === 'mainnet' ? 'bc1p' : 'tb1p'}...) owner address`,
     });
   }
 
@@ -652,7 +656,7 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
     sellerAddress: sellerAddress?.slice(0, 20) + '...',
     purchasePriceSats,
     currentPriceSats,
-    btcPriceUSD
+    btcPriceUSD: _clientBtcPriceUSD
   });
 
   // Validation
@@ -663,9 +667,9 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
   }
 
   // Validate Taproot address
-  if (!TAPROOT_RE.test(sellerAddress)) {
+  if (!isValidTaprootAddress(sellerAddress)) {
     return res.status(400).json({
-      error: 'Invalid seller address: must be a Taproot (bc1p...) address'
+      error: `Invalid seller address: must be a Taproot (${BITCOIN_NETWORK === 'mainnet' ? 'bc1p' : 'tb1p'}...) address`
     });
   }
 
@@ -877,9 +881,9 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
     });
   }
 
-  if (!TAPROOT_RE.test(sellerAddress)) {
+  if (!isValidTaprootAddress(sellerAddress)) {
     return res.status(400).json({
-      error: 'Invalid seller address: must be a Taproot (bc1p...) address'
+      error: `Invalid seller address: must be a Taproot (${BITCOIN_NETWORK === 'mainnet' ? 'bc1p' : 'tb1p'}...) address`
     });
   }
 
@@ -893,9 +897,11 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
       });
     }
 
+    const minSatsPerOrdinal = parseInt(process.env.MIN_ORDINAL_PAYMENT_SATS || 600, 10);
+    const totalOfferSats = minSatsPerOrdinal * ordinals.length;
+
     // Validate each ordinal and calculate totals
     let totalPurchaseSats = 0;
-    let totalCurrentSats = 0;
 
     for (const ord of ordinals) {
       if (!ord.inscriptionId || !ord.purchasePriceSats) {
@@ -909,28 +915,35 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
         });
       }
       totalPurchaseSats += ord.purchasePriceSats;
-      totalCurrentSats += ord.currentPriceSats || 0;
     }
 
-    // Calculate total tax loss
-    const totalLossSats = totalPurchaseSats - totalCurrentSats;
+    // Realized loss is based on Harvy's fixed sale proceeds, not upstream market estimates.
+    const totalLossSats = totalPurchaseSats - totalOfferSats;
     if (totalLossSats <= 0) {
       return res.status(400).json({
-        error: 'No tax loss to harvest. Total current value exceeds purchase cost.'
+        error: 'No tax loss to harvest. Total sale proceeds exceed or equal purchase cost.'
       });
     }
 
     const totalLossUSD = satsToUSD(totalLossSats, btcPriceUSD);
     const taxRate = userTaxRate !== undefined ? parseFloat(userTaxRate) : 0.30;
+    if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 1) {
+      return res.status(400).json({
+        error: 'Invalid tax rate: must be between 0% and 100% (0.00 to 1.00 as decimal)'
+      });
+    }
     const taxSavingsUSD = totalLossUSD * taxRate;
 
     // Calculate service fee on total
     const feeInfo = calculateServiceFee(taxSavingsUSD);
     const serviceFeeSats = usdToSats(feeInfo.feeUSD, btcPriceUSD);
-
-    // Payment: 600 sats per ordinal
-    const minSatsPerOrdinal = parseInt(process.env.MIN_ORDINAL_PAYMENT_SATS || 600, 10);
-    const totalOfferSats = minSatsPerOrdinal * ordinals.length;
+    const maxServiceFeeUSD = parseFloat(process.env.MAX_SERVICE_FEE_USD || 100);
+    if (feeInfo.feeUSD > maxServiceFeeUSD) {
+      return res.status(400).json({
+        error: `Service fee ($${feeInfo.feeUSD.toFixed(2)}) exceeds maximum allowed ($${maxServiceFeeUSD}). Please contact support for larger transactions.`,
+        details: 'This limit is in place for security during testnet/early launch.'
+      });
+    }
 
     console.log(`💰 Batch: ${ordinals.length} ordinals, Loss=$${totalLossUSD}, Savings=$${taxSavingsUSD}, Fee=$${feeInfo.feeUSD}`);
 
@@ -956,7 +969,7 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
         totalServiceFeeSats: serviceFeeSats,
         taxCalculation: {
           totalPurchaseSats,
-          totalCurrentSats,
+          totalSaleProceedsSats: totalOfferSats,
           totalLossSats,
           totalLossUSD,
           taxSavingsUSD,
@@ -989,13 +1002,13 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
  * Body: { psbtBase64 }
  */
 app.post('/api/finalize-psbt', transactionLimiter, async (req, res) => {
-  const { psbtBase64 } = req.body;
+  const psbtString = req.body.psbtBase64 || req.body.psbtHex || req.body.psbt;
 
   console.log('📡 Finalizing and broadcasting PSBT...');
 
-  if (!psbtBase64) {
+  if (!psbtString) {
     return res.status(400).json({
-      error: 'Missing required field: psbtBase64'
+      error: 'Missing required field: psbtBase64, psbtHex, or psbt'
     });
   }
 
@@ -1003,9 +1016,9 @@ app.post('/api/finalize-psbt', transactionLimiter, async (req, res) => {
     // SECURITY: Validate PSBT structure and economic invariants before broadcast.
     // This is a conservative, opinionated guardrail based on Harvy's own PSBT
     // construction patterns. It does NOT replace a professional audit for mainnet.
-    validatePsbtForHarvySafety(psbtBase64);
+    validatePsbtForHarvySafety(psbtString);
 
-    const txid = await broadcastPSBT(psbtBase64);
+    const txid = await broadcastPSBT(psbtString);
 
     console.log(`✅ Transaction broadcast successfully: ${txid}`);
 

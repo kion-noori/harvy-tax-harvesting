@@ -83,21 +83,19 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
   // Calculate totals
   const calculateTotals = () => {
     let totalPurchase = 0;
-    let totalCurrent = 0;
     let validCount = 0;
 
     selectedOrdinals.forEach(ord => {
       const purchasePrice = getNumericPrice(ord.inscription.id);
-      const currentPrice = ord.currentPrice;
 
       if (purchasePrice && purchasePrice > 0) {
         totalPurchase += purchasePrice;
-        totalCurrent += currentPrice || 0;
         validCount++;
       }
     });
 
-    const totalLoss = totalPurchase - totalCurrent;
+    const saleProceedsBTC = (600 * validCount) / 100000000;
+    const totalLoss = totalPurchase - saleProceedsBTC;
     const taxRate = userTaxRate / 100;
     const taxLossUSD = btcPriceUSD ? totalLoss * btcPriceUSD : 0;
     const taxSavingsUSD = taxLossUSD * taxRate;
@@ -125,7 +123,7 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
 
     return {
       totalPurchase,
-      totalCurrent,
+      saleProceedsBTC,
       totalLoss,
       taxLossUSD,
       taxSavingsUSD,
@@ -168,14 +166,14 @@ Transaction ID: ${txResult.txid}
 
     selectedOrdinals.forEach((ord, index) => {
       const purchasePrice = getNumericPrice(ord.inscription.id) || 0;
-      const currentPrice = ord.currentPrice || 0;
-      const loss = purchasePrice - currentPrice;
+      const salePrice = 600 / 100000000;
+      const loss = purchasePrice - salePrice;
 
       receipt += `
 ${index + 1}. Inscription #${ord.inscription.number || ord.inscription.id.slice(0, 16) + '...'}
    Inscription ID: ${ord.inscription.id}
    Cost Basis (Purchase Price): ${purchasePrice.toFixed(8)} BTC
-   Sale Price (to Harvy):       ${(600 / 100000000).toFixed(8)} BTC (600 sats)
+   Sale Price (to Harvy):       ${salePrice.toFixed(8)} BTC (600 sats)
    Capital Loss:                ${loss.toFixed(8)} BTC
 `;
     });
@@ -241,6 +239,11 @@ guidance on reporting cryptocurrency transactions.
       return;
     }
 
+    if (walletType !== 'xverse') {
+      alert('Selling is currently supported in-app with Xverse only while we finish hardening the other wallet flows.');
+      return;
+    }
+
     setIsProcessing(true);
     setProcessingStep('Creating transaction...');
 
@@ -249,7 +252,6 @@ guidance on reporting cryptocurrency transactions.
       const ordinalsData = selectedOrdinals.map(ord => ({
         inscriptionId: ord.inscription.id,
         purchasePriceSats: Math.round(getNumericPrice(ord.inscription.id) * 100000000),
-        currentPriceSats: Math.round((ord.currentPrice || 0) * 100000000),
       }));
 
       // Debug: log the public key being sent
@@ -372,7 +374,7 @@ guidance on reporting cryptocurrency transactions.
                     : ord.inscription.id.slice(0, 12) + '...'}
                 </span>
                 <span className="ordinal-item-current">
-                  Est: {ord.currentPrice ? ord.currentPrice.toFixed(6) : 'N/A'} BTC
+                  Sale Price: 600 sats
                 </span>
               </div>
               <div className="ordinal-item-input">
@@ -453,8 +455,8 @@ guidance on reporting cryptocurrency transactions.
               </div>
 
               <div className="summary-row">
-                <span>Total Current Value</span>
-                <span>{totals.totalCurrent.toFixed(8)} BTC</span>
+                <span>Total Sale Proceeds</span>
+                <span>{totals.saleProceedsBTC.toFixed(8)} BTC</span>
               </div>
 
               <div className="summary-row loss">

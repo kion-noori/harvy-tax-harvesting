@@ -5,7 +5,7 @@ export default function PrivacyPolicy({ onNavigate }) {
     <div className="legal-page">
       <div className="legal-container">
         <h1 className="legal-title">Privacy Policy</h1>
-        <p className="legal-updated">Last Updated: October 27, 2025</p>
+        <p className="legal-updated">Last Updated: April 8, 2026</p>
 
         <div className="legal-content">
           <section className="legal-section">
@@ -24,18 +24,18 @@ export default function PrivacyPolicy({ onNavigate }) {
           <section className="legal-section">
             <h2>2. Information We Collect</h2>
 
-            <h3>2.1 Wallet Address (Read-Only)</h3>
+            <h3>2.1 Wallet Address and Transaction Requests</h3>
             <p>
               When you connect your Bitcoin wallet (e.g., Xverse), we temporarily access your public
-              wallet address to fetch your Bitcoin Ordinals holdings. This is read-only access - we
-              never request transaction signing permissions or access to your private keys.
+              wallet address to fetch your Bitcoin Ordinals holdings. If you choose to sell ordinals
+              through Harvy, your wallet will also ask you to review and sign a transaction that you
+              explicitly approve. We never access your private keys.
             </p>
             <p>
               <strong>What we do NOT collect:</strong>
             </p>
             <ul>
               <li>Private keys or seed phrases</li>
-              <li>Transaction signing permissions</li>
               <li>Personal identifying information (name, email, phone, etc.)</li>
               <li>Payment information (we don't process payments currently)</li>
             </ul>
@@ -74,9 +74,9 @@ export default function PrivacyPolicy({ onNavigate }) {
             <p>We use the collected information solely to:</p>
             <ul>
               <li>Display your Bitcoin Ordinals holdings</li>
-              <li>Calculate purchase prices and current market values</li>
-              <li>Calculate unrealized gains and losses</li>
-              <li>Generate tax loss reports in Form 8949 format</li>
+              <li>Help prepare PSBT-based ordinal sale transactions that you approve in your wallet</li>
+              <li>Calculate fixed sale proceeds, estimated fees, and estimated tax impact from the inputs you provide</li>
+              <li>Generate transaction receipts and operational logs</li>
               <li>Improve the Service and fix bugs</li>
               <li>Understand how users interact with the Service</li>
             </ul>
@@ -102,13 +102,18 @@ export default function PrivacyPolicy({ onNavigate }) {
 
             <h3>4.2 Local Storage Only</h3>
             <p>
-              Your wallet connection state is stored only in your browser's local storage. This data
-              never leaves your device and is cleared when you:
+              Harvy stores ordinal purchase-price entries in your browser's local storage so you do not
+              have to retype them each time. Wallet connection state is handled by the wallet extension,
+              not persisted by Harvy.
+            </p>
+            <p>
+              Local data never leaves your device unless you submit a transaction request to Harvy. It
+              can be cleared when you:
             </p>
             <ul>
-              <li>Disconnect your wallet</li>
+              <li>Clear your browser storage</li>
               <li>Clear your browser cache</li>
-              <li>Close the browser (depending on wallet settings)</li>
+              <li>Remove saved Harvy data from your browser</li>
             </ul>
 
             <h3>4.3 Server-Side Caching</h3>
@@ -142,8 +147,8 @@ export default function PrivacyPolicy({ onNavigate }) {
 
             <h3>5.2 Magic Eden API</h3>
             <p>
-              We fetch marketplace data (purchase history, current prices) from Magic Eden's API.
-              Your wallet address is sent to Magic Eden to retrieve activity data.
+              We fetch inscription and marketplace context from Magic Eden's API. Your wallet address
+              may be sent to Magic Eden to retrieve inscription and activity data.
             </p>
             <p>
               <a href="https://magiceden.io/privacy-policy" target="_blank" rel="noopener noreferrer">
@@ -196,7 +201,7 @@ export default function PrivacyPolicy({ onNavigate }) {
               <li>HTTPS encryption for all connections</li>
               <li>Security headers (CSP, HSTS, etc.) to prevent XSS and other attacks</li>
               <li>Rate limiting to prevent abuse</li>
-              <li>Read-only wallet permissions (no transaction signing)</li>
+              <li>Users approve transaction signatures in their own wallets</li>
             </ul>
             <p>
               However, no method of transmission over the Internet is 100% secure. You are responsible
@@ -275,7 +280,7 @@ export default function PrivacyPolicy({ onNavigate }) {
               <strong>In plain English:</strong>
             </p>
             <ul>
-              <li>✅ We only read your public wallet address (read-only)</li>
+              <li>✅ We only access public wallet data unless you explicitly choose to sign a transaction</li>
               <li>✅ We don't store your data in databases</li>
               <li>✅ We don't require accounts or emails</li>
               <li>✅ We don't sell your data</li>

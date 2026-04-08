@@ -1,5 +1,7 @@
 # Harvy — Bitcoin Ordinals Tax Loss Harvesting Platform
 
+Superseded for current operational state by [PROJECT_STATUS.md](/Users/kionnoori/my-nft-project/PROJECT_STATUS.md). Use this file as historical/architectural context and verify details against the live code.
+
 ## What This Is
 
 Harvy is a web app that lets Bitcoin Ordinal holders sell their underwater (at-a-loss) inscriptions to Harvy's wallet via atomic swaps (PSBTs). Users realize capital losses for tax purposes. Harvy charges a percentage of the tax savings as a service fee.

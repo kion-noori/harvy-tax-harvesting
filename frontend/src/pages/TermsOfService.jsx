@@ -5,7 +5,7 @@ export default function TermsOfService({ onNavigate }) {
     <div className="legal-page">
       <div className="legal-container">
         <h1 className="legal-title">Terms of Service</h1>
-        <p className="legal-updated">Last Updated: October 27, 2025</p>
+        <p className="legal-updated">Last Updated: April 8, 2026</p>
 
         <div className="legal-content">
           <section className="legal-section">
@@ -15,9 +15,9 @@ export default function TermsOfService({ onNavigate }) {
               ("Terms"). If you do not agree to these Terms, you may not use the Service.
             </p>
             <p>
-              Harvy is a tool that helps Bitcoin Ordinals holders identify unrealized losses in their
-              portfolios for tax planning purposes. We provide informational services only and do not
-              provide tax, legal, or financial advice.
+              Harvy is a tool that helps Bitcoin Ordinals holders sell selected ordinals to Harvy using
+              PSBT-based Bitcoin transactions and review estimated tax implications. We do not provide
+              tax, legal, or financial advice.
             </p>
           </section>
 
@@ -39,14 +39,14 @@ export default function TermsOfService({ onNavigate }) {
             <p>Harvy provides the following features:</p>
             <ul>
               <li>Display of Bitcoin Ordinals held in your connected wallet</li>
-              <li>Purchase price information from Magic Eden marketplace activity data</li>
-              <li>Current market value estimates from Magic Eden marketplace data</li>
-              <li>Calculation of unrealized gains and losses</li>
-              <li>Export of tax loss information in IRS Form 8949 compatible format</li>
+              <li>Preparation of PSBT-based sales of eligible ordinals to Harvy</li>
+              <li>User-entered cost basis and estimated tax-impact calculations</li>
+              <li>Generation of sale receipts and related transaction records</li>
             </ul>
             <p>
-              <strong>Important:</strong> Harvy does NOT execute any transactions on your behalf. We do not
-              buy, sell, or transfer any assets. We only provide read-only information about your holdings.
+              <strong>Important:</strong> Harvy does facilitate sales of ordinals to Harvy when you choose
+              to sign and submit a transaction. You are responsible for reviewing every transaction in
+              your wallet before approval.
             </p>
           </section>
 
@@ -72,8 +72,8 @@ export default function TermsOfService({ onNavigate }) {
             </p>
             <ul>
               <li>The accuracy, completeness, or timeliness of third-party data</li>
-              <li>That market prices reflect actual realizable value</li>
-              <li>That purchase prices are complete or accurate</li>
+              <li>That third-party market context reflects actual realizable value</li>
+              <li>That user-entered purchase prices or cost basis are complete or accurate</li>
               <li>That tax calculations are error-free</li>
             </ul>
             <p>
@@ -85,9 +85,9 @@ export default function TermsOfService({ onNavigate }) {
           <section className="legal-section">
             <h2>6. Wallet Connection and Security</h2>
             <p>
-              When you connect your Bitcoin wallet (e.g., Xverse), Harvy only requests <strong>read-only
-              permissions</strong>. We never request transaction signing permissions or access to your
-              private keys.
+              When you connect your Bitcoin wallet, Harvy reads your public wallet data. If you decide
+              to sell ordinals through Harvy, your wallet will ask you to review and sign the transaction.
+              Harvy never accesses your private keys.
             </p>
             <p>
               However, you are responsible for:

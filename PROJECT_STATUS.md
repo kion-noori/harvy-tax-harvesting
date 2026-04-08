@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-05
+Last updated: 2026-04-08
 Primary reference file for future sessions. Update this document at the end of each meaningful pass.
 
 ## Current Product State
@@ -21,9 +21,13 @@ Primary reference file for future sessions. Update this document at the end of e
 
 ## Most Recent Pass
 
-Date: 2026-04-05
+Date: 2026-04-08
 
 Completed:
+- Updated legal/privacy copy to match the actual transaction-capable product.
+- Added `transaction-events.ndjson` to `.gitignore`.
+- Added frontend network env documentation to the README.
+- Marked older project-summary documentation as secondary to this file.
 - Reworked sell-flow math to use fixed Harvy sale proceeds rather than missing market-value data.
 - Restricted in-app selling to Xverse while other wallet sell paths remain unverified.
 - Hardened batch tax-rate validation and service-fee caps.

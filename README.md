@@ -61,6 +61,10 @@ The frontend runs on `http://localhost:3000`, backend on `http://localhost:3001`
 | `HARVY_WALLET_ADDRESS` | Harvy's Bitcoin wallet address (Taproot) |
 | `HARVY_WALLET_PRIVATE_KEY` | Harvy's wallet private key (WIF format) |
 
+Frontend environment:
+- `REACT_APP_API_URL` — frontend API base URL
+- `REACT_APP_BITCOIN_NETWORK` — `mainnet` or `testnet`
+
 ## Architecture
 
 | Layer | Tech |

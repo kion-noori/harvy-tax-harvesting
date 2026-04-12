@@ -755,11 +755,11 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
 
     console.log(`💰 Tax calculation: Loss=${taxLossSats} sats ($${taxLossUSD}), Savings=$${taxSavingsUSD} (${taxRate * 100}% rate)`);
 
-    // Calculate service fee based on tiered structure
+    // Calculate service fee using Harvy's flat rate
     const feeInfo = calculateServiceFee(taxSavingsUSD);
     const serviceFeeSats = usdToSats(feeInfo.feeUSD, btcPriceUSD);
 
-    console.log(`💵 Service fee: Tier ${feeInfo.tier} (${feeInfo.feePercent}%) = ${serviceFeeSats} sats ($${feeInfo.feeUSD})`);
+    console.log(`💵 Service fee: Flat ${feeInfo.feePercent}% = ${serviceFeeSats} sats ($${feeInfo.feeUSD})`);
 
     // Service fee cap (security limit - caps actual cash changing hands)
     const maxServiceFeeUSD = parseFloat(process.env.MAX_SERVICE_FEE_USD || 100);
@@ -819,7 +819,7 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
           taxRate,
         },
         serviceFee: {
-          tier: feeInfo.tier,
+          model: feeInfo.model,
           percent: feeInfo.feePercent,
           usd: feeInfo.feeUSD,
           sats: serviceFeeSats,
@@ -1000,7 +1000,7 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
           taxRate,
         },
         serviceFee: {
-          tier: feeInfo.tier,
+          model: feeInfo.model,
           percent: feeInfo.feePercent,
           usd: feeInfo.feeUSD,
           sats: serviceFeeSats,

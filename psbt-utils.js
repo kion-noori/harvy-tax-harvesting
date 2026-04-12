@@ -10,38 +10,18 @@ bitcoin.initEccLib(ecc);
 const ECPair = ECPairFactory(ecc);
 
 /**
- * Calculate service fee based on tax savings
+ * Calculate a flat service fee based on tax savings.
  * @param {number} taxSavingsUSD - Tax savings in USD
- * @returns {object} - { feeUSD, feePercent, tier }
+ * @returns {object} - { feeUSD, feePercent, model }
  */
 export function calculateServiceFee(taxSavingsUSD) {
-  const tiers = [
-    { max: parseFloat(process.env.FEE_TIER_1_MAX || 100), percent: parseFloat(process.env.FEE_TIER_1_PERCENT || 5) },
-    { max: parseFloat(process.env.FEE_TIER_2_MAX || 500), percent: parseFloat(process.env.FEE_TIER_2_PERCENT || 7) },
-    { max: parseFloat(process.env.FEE_TIER_3_MAX || 2000), percent: parseFloat(process.env.FEE_TIER_3_PERCENT || 10) },
-    { max: parseFloat(process.env.FEE_TIER_4_MAX || 10000), percent: parseFloat(process.env.FEE_TIER_4_PERCENT || 12) },
-    { max: Infinity, percent: parseFloat(process.env.FEE_TIER_5_PERCENT || 15) },
-  ];
+  const feePercent = parseFloat(process.env.FLAT_SERVICE_FEE_PERCENT || 10);
+  const feeUSD = taxSavingsUSD * (feePercent / 100);
 
-  for (let i = 0; i < tiers.length; i++) {
-    if (taxSavingsUSD <= tiers[i].max) {
-      const feeUSD = taxSavingsUSD * (tiers[i].percent / 100);
-      return {
-        feeUSD: Math.round(feeUSD * 100) / 100, // Round to 2 decimals
-        feePercent: tiers[i].percent,
-        tier: i + 1,
-        tierMax: tiers[i].max === Infinity ? 'Infinity' : tiers[i].max
-      };
-    }
-  }
-
-  // Fallback (shouldn't reach here)
-  const defaultPercent = 10;
   return {
-    feeUSD: Math.round(taxSavingsUSD * (defaultPercent / 100) * 100) / 100,
-    feePercent: defaultPercent,
-    tier: 3,
-    tierMax: 2000
+    feeUSD: Math.round(feeUSD * 100) / 100,
+    feePercent,
+    model: 'flat',
   };
 }
 

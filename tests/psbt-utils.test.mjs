@@ -74,17 +74,20 @@ test.afterEach(() => {
   restoreEnv();
 });
 
-test('calculateServiceFee respects tier thresholds', () => {
+test('calculateServiceFee uses the flat configured percentage', () => {
+  delete process.env.FLAT_SERVICE_FEE_PERCENT;
   assert.deepEqual(calculateServiceFee(100), {
-    feeUSD: 5,
-    feePercent: 5,
-    tier: 1,
-    tierMax: 100,
+    feeUSD: 10,
+    feePercent: 10,
+    model: 'flat',
   });
 
-  assert.equal(calculateServiceFee(500).feePercent, 7);
-  assert.equal(calculateServiceFee(2001).feePercent, 12);
-  assert.equal(calculateServiceFee(10001).feePercent, 15);
+  process.env.FLAT_SERVICE_FEE_PERCENT = '7.5';
+  assert.deepEqual(calculateServiceFee(200), {
+    feeUSD: 15,
+    feePercent: 7.5,
+    model: 'flat',
+  });
 });
 
 test('usdToSats and satsToUSD round consistently enough for UI math', () => {

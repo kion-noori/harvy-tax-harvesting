@@ -24,6 +24,7 @@ Primary reference file for future sessions. Update this document at the end of e
 Date: 2026-04-12
 
 Completed:
+- Simplified Harvy pricing from tiered service fees to a flat service-fee percentage.
 - Added backend unit tests in [tests/psbt-utils.test.mjs](/Users/kionnoori/my-nft-project/tests/psbt-utils.test.mjs) using Node's built-in test runner.
 - Added root script `npm run test:backend`.
 - Added [MANUAL_TEST_CHECKLIST.md](/Users/kionnoori/my-nft-project/MANUAL_TEST_CHECKLIST.md) for the next Xverse testing round.

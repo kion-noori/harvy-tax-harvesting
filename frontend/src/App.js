@@ -127,7 +127,7 @@ export default function App() {
                 <div className="feature-divider"></div>
                 <div className="feature-item">
                   <h3>You keep the savings</h3>
-                  <p>Our fee is a small percentage of your realized tax benefit. You keep the majority.</p>
+                  <p>Our fee is a flat percentage of your estimated tax benefit, with the on-chain network fee shown separately.</p>
                 </div>
                 <div className="feature-divider"></div>
                 <div className="feature-item">
@@ -144,7 +144,7 @@ export default function App() {
                 {[
                   {
                     q: "How does Harvy make money?",
-                    a: "We charge a small service fee (5-15%) based on your realized tax savings. You keep the majority of the benefit."
+                    a: "We charge a flat service fee based on your estimated tax savings. You still see the on-chain network fee separately."
                   },
                   {
                     q: "Is this safe?",

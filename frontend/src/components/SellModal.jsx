@@ -99,24 +99,7 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
     const taxRate = userTaxRate / 100;
     const taxLossUSD = btcPriceUSD ? totalLoss * btcPriceUSD : 0;
     const taxSavingsUSD = taxLossUSD * taxRate;
-
-    // Fee calculation
-    const tiers = [
-      { max: 100, percent: 5 },
-      { max: 500, percent: 7 },
-      { max: 2000, percent: 10 },
-      { max: 10000, percent: 12 },
-      { max: Infinity, percent: 15 },
-    ];
-
-    let feePercent = 5;
-    for (const tier of tiers) {
-      if (taxSavingsUSD <= tier.max) {
-        feePercent = tier.percent;
-        break;
-      }
-    }
-
+    const feePercent = 10;
     const feeUSD = taxSavingsUSD * (feePercent / 100);
     const netBenefitUSD = taxSavingsUSD - feeUSD;
     const paymentSats = 600 * validCount; // 600 sats per ordinal
@@ -472,7 +455,7 @@ guidance on reporting cryptocurrency transactions.
               </div>
 
               <div className="benefit-row">
-                <span>Service Fee ({totals.feePercent}%)</span>
+                <span>Service Fee (Flat {totals.feePercent}%)</span>
                 <span>-${totals.feeUSD.toFixed(2)}</span>
               </div>
 

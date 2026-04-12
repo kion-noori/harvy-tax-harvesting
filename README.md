@@ -11,7 +11,7 @@ Most crypto tax tools tell you *what* you owe. None of them help you *reduce* wh
 Harvy buys your underwater Ordinals directly — no listings, no waiting, no counterparty risk. You connect your wallet, select the ordinals you want to sell, manually enter your cost basis, and sell them to Harvy in a single atomic transaction. Harvy records the on-chain sale and gives you a downloadable receipt you can use with your tax records.
 
 - **Instant liquidity** — Sell losing Ordinals in one click. No marketplace, no buyers needed.
-- **You keep the savings** — Harvy charges a small fee (5-15%) on the tax benefit. You keep the rest.
+- **You keep the savings** — Harvy charges a flat fee on the estimated tax benefit. You keep the rest.
 - **Non-custodial** — Every transaction uses PSBTs (Partially Signed Bitcoin Transactions). Your private keys never leave your wallet.
 
 ## How It Works
@@ -60,6 +60,7 @@ The frontend runs on `http://localhost:3000`, backend on `http://localhost:3001`
 | `MEMPOOL_API_URL` | Mempool.space API endpoint |
 | `HARVY_WALLET_ADDRESS` | Harvy's Bitcoin wallet address (Taproot) |
 | `HARVY_WALLET_PRIVATE_KEY` | Harvy's wallet private key (WIF format) |
+| `FLAT_SERVICE_FEE_PERCENT` | Flat Harvy fee percentage on estimated tax savings |
 
 Frontend environment:
 - `REACT_APP_API_URL` — frontend API base URL

@@ -13,8 +13,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import NodeCache from 'node-cache';
 import {
-  calculateServiceFee,
-  usdToSats,
+  getFlatServiceFeeSats,
   satsToUSD,
   createOrdinalPurchasePSBT,
   createBatchedOrdinalPurchasePSBT,
@@ -755,17 +754,16 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
 
     console.log(`💰 Tax calculation: Loss=${taxLossSats} sats ($${taxLossUSD}), Savings=$${taxSavingsUSD} (${taxRate * 100}% rate)`);
 
-    // Calculate service fee using Harvy's flat rate
-    const feeInfo = calculateServiceFee(taxSavingsUSD);
-    const serviceFeeSats = usdToSats(feeInfo.feeUSD, btcPriceUSD);
+    const serviceFeeSats = getFlatServiceFeeSats();
+    const serviceFeeUSD = satsToUSD(serviceFeeSats, btcPriceUSD);
 
-    console.log(`💵 Service fee: Flat ${feeInfo.feePercent}% = ${serviceFeeSats} sats ($${feeInfo.feeUSD})`);
+    console.log(`💵 Service fee: Flat ${serviceFeeSats} sats ($${serviceFeeUSD})`);
 
     // Service fee cap (security limit - caps actual cash changing hands)
     const maxServiceFeeUSD = parseFloat(process.env.MAX_SERVICE_FEE_USD || 100);
-    if (feeInfo.feeUSD > maxServiceFeeUSD) {
+    if (serviceFeeUSD > maxServiceFeeUSD) {
       return res.status(400).json({
-        error: `Service fee ($${feeInfo.feeUSD.toFixed(2)}) exceeds maximum allowed ($${maxServiceFeeUSD}). Please contact support for larger transactions.`,
+        error: `Service fee ($${serviceFeeUSD.toFixed(2)}) exceeds maximum allowed ($${maxServiceFeeUSD}). Please contact support for larger transactions.`,
         details: 'This limit is in place for security during testnet/early launch.'
       });
     }
@@ -819,22 +817,21 @@ app.post('/api/create-psbt-offer', transactionLimiter, async (req, res) => {
           taxRate,
         },
         serviceFee: {
-          model: feeInfo.model,
-          percent: feeInfo.feePercent,
-          usd: feeInfo.feeUSD,
+          model: 'flat_sats',
+          usd: serviceFeeUSD,
           sats: serviceFeeSats,
         },
         sellerNetCash: offerSats - serviceFeeSats, // What seller gets in cash
-        sellerNetBenefit: taxSavingsUSD - feeInfo.feeUSD, // Tax savings minus fee
+        sellerNetBenefit: taxSavingsUSD - serviceFeeUSD, // Tax savings minus fee
       },
       details: psbtResult.details,
       instructions: [
         'Review the transaction details carefully',
         'You will receive ' + offerSats + ' sats for the ordinal',
-        'Service fee: ' + serviceFeeSats + ' sats ($' + feeInfo.feeUSD.toFixed(2) + ')',
+        'Service fee: ' + serviceFeeSats + ' sats ($' + serviceFeeUSD.toFixed(2) + ')',
         'Net cash: ' + (offerSats - serviceFeeSats) + ' sats',
         'Tax savings: $' + taxSavingsUSD.toFixed(2),
-        'Net benefit: $' + (taxSavingsUSD - feeInfo.feeUSD).toFixed(2),
+        'Net benefit: $' + (taxSavingsUSD - serviceFeeUSD).toFixed(2),
         'Sign with your wallet to complete the transaction',
       ],
     });
@@ -948,18 +945,17 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
     }
     const taxSavingsUSD = totalLossUSD * taxRate;
 
-    // Calculate service fee on total
-    const feeInfo = calculateServiceFee(taxSavingsUSD);
-    const serviceFeeSats = usdToSats(feeInfo.feeUSD, btcPriceUSD);
+    const serviceFeeSats = getFlatServiceFeeSats();
+    const serviceFeeUSD = satsToUSD(serviceFeeSats, btcPriceUSD);
     const maxServiceFeeUSD = parseFloat(process.env.MAX_SERVICE_FEE_USD || 100);
-    if (feeInfo.feeUSD > maxServiceFeeUSD) {
+    if (serviceFeeUSD > maxServiceFeeUSD) {
       return res.status(400).json({
-        error: `Service fee ($${feeInfo.feeUSD.toFixed(2)}) exceeds maximum allowed ($${maxServiceFeeUSD}). Please contact support for larger transactions.`,
+        error: `Service fee ($${serviceFeeUSD.toFixed(2)}) exceeds maximum allowed ($${maxServiceFeeUSD}). Please contact support for larger transactions.`,
         details: 'This limit is in place for security during testnet/early launch.'
       });
     }
 
-    console.log(`💰 Batch: ${ordinals.length} ordinals, Loss=$${totalLossUSD}, Savings=$${taxSavingsUSD}, Fee=$${feeInfo.feeUSD}`);
+    console.log(`💰 Batch: ${ordinals.length} ordinals, Loss=$${totalLossUSD}, Savings=$${taxSavingsUSD}, Fee=${serviceFeeSats} sats`);
     logTransactionEvent('create_batch_psbt_requested', {
       sellerAddress,
       ordinalCount: ordinals.length,
@@ -978,7 +974,6 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
       sellerPublicKey,
       totalOfferSats,
       totalServiceFeeSats: serviceFeeSats,
-      btcPriceUSD,
     });
 
     console.log('✅ Batched PSBT created successfully');
@@ -1000,12 +995,12 @@ app.post('/api/create-batch-psbt', transactionLimiter, async (req, res) => {
           taxRate,
         },
         serviceFee: {
-          model: feeInfo.model,
-          percent: feeInfo.feePercent,
-          usd: feeInfo.feeUSD,
+          model: 'flat_sats',
+          usd: serviceFeeUSD,
           sats: serviceFeeSats,
         },
-        sellerNetBenefit: taxSavingsUSD - feeInfo.feeUSD,
+        sellerNetCashSats: totalOfferSats - serviceFeeSats,
+        sellerNetBenefit: taxSavingsUSD - serviceFeeUSD,
       },
       details: psbtResult.details,
     });

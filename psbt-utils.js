@@ -10,19 +10,15 @@ bitcoin.initEccLib(ecc);
 const ECPair = ECPairFactory(ecc);
 
 /**
- * Calculate a flat service fee based on tax savings.
- * @param {number} taxSavingsUSD - Tax savings in USD
- * @returns {object} - { feeUSD, feePercent, model }
+ * Return Harvy's flat service fee in sats for a single transaction.
+ * @returns {number}
  */
-export function calculateServiceFee(taxSavingsUSD) {
-  const feePercent = parseFloat(process.env.FLAT_SERVICE_FEE_PERCENT || 10);
-  const feeUSD = taxSavingsUSD * (feePercent / 100);
-
-  return {
-    feeUSD: Math.round(feeUSD * 100) / 100,
-    feePercent,
-    model: 'flat',
-  };
+export function getFlatServiceFeeSats() {
+  const raw = parseInt(process.env.FLAT_SERVICE_FEE_SATS || '1000', 10);
+  if (!Number.isFinite(raw) || raw < 0) {
+    throw new Error('Invalid FLAT_SERVICE_FEE_SATS configuration');
+  }
+  return raw;
 }
 
 /**
@@ -479,13 +475,15 @@ export async function createOrdinalPurchasePSBT(params) {
  *
  * Transaction structure:
  * INPUTS:
- *   1-N. Harvy's UTXOs (pays for all ordinals + fees)
- *   N+1 to M. Seller's UTXOs containing inscriptions (one per ordinal)
+ *   1-N. Seller's UTXOs containing inscriptions (one per ordinal)
+ *   N+1 to K. Seller's ordinary BTC UTXOs (pay the flat service fee)
+ *   K+1 to M. Harvy's UTXOs (fund the ordinal purchase and miner fee)
  *
  * OUTPUTS:
- *   1. Payment to seller (600 sats × number of ordinals)
- *   2-N. Each inscription → Harvy's address (preserving UTXO value)
- *   N+1. Change → Harvy (if any)
+ *   1-N. Each inscription → Harvy's address (preserving UTXO value)
+ *   N+1. Seller payout (Harvy offer plus any seller-side fee change refund)
+ *   N+2. Flat service fee → Harvy
+ *   N+3. Change → Harvy (if any)
  *
  * @param {object} params - Transaction parameters
  * @returns {Promise<object>} - { psbtBase64, psbtHex, details }
@@ -497,7 +495,6 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
     sellerPublicKey,   // Seller's actual internal public key (hex string from wallet)
     totalOfferSats,    // Total payment (600 × ordinals.length)
     totalServiceFeeSats,
-    btcPriceUSD,
   } = params;
 
   console.log('Creating BATCHED PSBT with params:', {
@@ -542,6 +539,23 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
     0
   );
 
+  // Fetch seller UTXOs to fund the flat service fee.
+  const sellerAllUtxos = await fetchUTXOs(sellerAddress);
+  const inscriptionKeys = new Set(inscriptionUTXOs.map((utxo) => `${utxo.txid}:${utxo.vout}`));
+  const sellerSpendableUtxos = sellerAllUtxos.filter(
+    (utxo) => !inscriptionKeys.has(`${utxo.txid}:${utxo.vout}`)
+  );
+
+  if (totalServiceFeeSats > 0 && sellerSpendableUtxos.length === 0) {
+    throw new Error('Seller has no spendable BTC UTXOs available to fund the flat service fee');
+  }
+
+  const sellerFeeSelection = totalServiceFeeSats > 0
+    ? selectUTXOs(sellerSpendableUtxos, totalServiceFeeSats, 0)
+    : { selected: [], change: 0 };
+  const sellerFeeSelected = sellerFeeSelection.selected;
+  const sellerFeeChange = sellerFeeSelection.change;
+
   // Fetch Harvy's UTXOs to fund the purchase
   const harvyUTXOs = await fetchUTXOs(harvyAddress);
   if (harvyUTXOs.length === 0) {
@@ -549,9 +563,9 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
   }
 
   // Estimate fees: ~180 bytes per input + ~34 bytes per output + 10 bytes overhead
-  // Inputs: harvySelected + inscriptionUTXOs
-  // Outputs: payment + inscriptions + change (potentially 2 change outputs)
-  const estimatedVsize = 10 + (180 * (1 + inscriptionUTXOs.length)) + (34 * (2 + inscriptionUTXOs.length));
+  // Inputs: inscriptionUTXOs + sellerFeeSelected + harvySelected
+  // Outputs: inscription transfers + seller payout + service fee + Harvy change
+  const estimatedVsize = 10 + (180 * (1 + inscriptionUTXOs.length + sellerFeeSelected.length)) + (34 * (3 + inscriptionUTXOs.length));
   const feeRate = 5; // sats/vbyte (conservative for testnet)
   const estimatedFee = Math.ceil(estimatedVsize * feeRate);
 
@@ -627,7 +641,25 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
     });
   }
 
-  // INPUTS N to M: Harvy's funding inputs
+  // INPUTS N to K: Seller's ordinary BTC inputs to pay Harvy's flat service fee
+  for (const utxo of sellerFeeSelected) {
+    const txHex = await fetchTransactionHex(utxo.txid);
+    const prevTx = bitcoin.Transaction.fromHex(txHex);
+    const prevOutput = prevTx.outs[utxo.vout];
+    const inputIndex = psbt.inputCount;
+    sellerInputIndices.push(inputIndex);
+    psbt.addInput({
+      hash: utxo.txid,
+      index: utxo.vout,
+      witnessUtxo: {
+        script: prevOutput.script,
+        value: BigInt(utxo.value),
+      },
+      tapInternalKey: sellerInternalPubkey,
+    });
+  }
+
+  // INPUTS K to M: Harvy's funding inputs
   const harvyInputStartIndex = psbt.inputCount;
   for (const utxo of harvySelected) {
     psbt.addInput({
@@ -657,10 +689,14 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
     });
   }
 
+  // Refund any seller-side overage back into the same payout output so the
+  // transaction still has a single non-Harvy recipient output.
+  const sellerPayoutSats = totalOfferSats + sellerFeeChange;
+
   // OUTPUT N: Payment to seller
   psbt.addOutput({
     address: sellerAddress,
-    value: BigInt(totalOfferSats),
+    value: BigInt(sellerPayoutSats),
   });
 
   // OUTPUT N+1: Service fee to Harvy (only if above dust limit)
@@ -699,7 +735,7 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
     psbtHex,
     details: {
       harvyInputCount: harvySelected.length,
-      sellerInputCount: inscriptionUTXOs.length,
+      sellerInputCount: inscriptionUTXOs.length + sellerFeeSelected.length,
       sellerInputIndices, // Indices the seller needs to sign
       inscriptionUTXOs: inscriptionUTXOs.map(u => ({
         inscriptionId: u.inscriptionId,
@@ -708,10 +744,12 @@ export async function createBatchedOrdinalPurchasePSBT(params) {
         value: u.value,
       })),
       outputs: {
-        sellerPayment: totalOfferSats,
+        sellerPayment: sellerPayoutSats,
         inscriptionValues: inscriptionUTXOs.map(u => u.value),
         serviceFee: totalServiceFeeSats,
         harvyChange,
+        sellerFeeInputTotal: sellerFeeSelected.reduce((sum, utxo) => sum + utxo.value, 0),
+        sellerFeeChange,
       },
       estimatedFee,
     },

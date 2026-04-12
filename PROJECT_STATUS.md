@@ -24,12 +24,15 @@ Primary reference file for future sessions. Update this document at the end of e
 Date: 2026-04-12
 
 Completed:
+- Switched Harvy pricing from percentage-based estimates to a flat 1,000 sat service fee per batch transaction.
+- Updated the batch PSBT builder so the seller now funds the flat service fee with ordinary BTC UTXOs while Harvy still funds the ordinal purchase side.
+- Updated the sell modal and receipt language to reflect the real flat-fee economics and Harvy-funded miner fee in the current batch flow.
 - Reworked the ordinals browser around collection-first discovery, with a collection dropdown, text filter, faster summary toolbar, and clearer selection state.
 - Updated ordinal cards to show display name and collection metadata for quicker scanning.
 - Shifted media rendering toward preview-first loading for image/video/model/audio content when safe, which improves perceived grid speed.
 - Added clearer sell-modal mechanics copy and surfaced network-fee handling more explicitly in the UI.
-- Fixed frontend fee-display consistency so the modal uses the configured flat fee percentage instead of a stale hardcoded value.
-- Simplified Harvy pricing from tiered service fees to a flat service-fee percentage.
+- Fixed frontend fee-display consistency so the modal reflects the active flat-fee model instead of stale hardcoded assumptions.
+- Simplified Harvy pricing from tiered service fees to a flat-fee model.
 - Added backend unit tests in [tests/psbt-utils.test.mjs](/Users/kionnoori/my-nft-project/tests/psbt-utils.test.mjs) using Node's built-in test runner.
 - Added root script `npm run test:backend`.
 - Added [MANUAL_TEST_CHECKLIST.md](/Users/kionnoori/my-nft-project/MANUAL_TEST_CHECKLIST.md) for the next Xverse testing round.

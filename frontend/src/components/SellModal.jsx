@@ -7,8 +7,8 @@ import '../styles/SellModal.css';
  * Shows each ordinal with editable purchase price, calculates totals
  */
 export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, btcAddress, walletType, btcPublicKey }) {
-  const rawFeePercent = Number(process.env.REACT_APP_FLAT_SERVICE_FEE_PERCENT || 10);
-  const configuredFeePercent = Number.isFinite(rawFeePercent) ? rawFeePercent : 10;
+  const rawFeeSats = Number(process.env.REACT_APP_FLAT_SERVICE_FEE_SATS || 1000);
+  const configuredFeeSats = Number.isFinite(rawFeeSats) ? rawFeeSats : 1000;
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
   const [txResult, setTxResult] = useState(null);
@@ -101,10 +101,10 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
     const taxRate = userTaxRate / 100;
     const taxLossUSD = btcPriceUSD ? totalLoss * btcPriceUSD : 0;
     const taxSavingsUSD = taxLossUSD * taxRate;
-    const feePercent = configuredFeePercent;
-    const feeUSD = taxSavingsUSD * (feePercent / 100);
+    const feeUSD = btcPriceUSD ? (configuredFeeSats / 100000000) * btcPriceUSD : 0;
     const netBenefitUSD = taxSavingsUSD - feeUSD;
     const paymentSats = 600 * validCount; // 600 sats per ordinal
+    const netCashSats = paymentSats - configuredFeeSats;
 
     return {
       totalPurchase,
@@ -112,11 +112,12 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
       totalLoss,
       taxLossUSD,
       taxSavingsUSD,
-      feePercent,
+      feeSats: configuredFeeSats,
       feeUSD,
       netBenefitUSD,
       validCount,
-      paymentSats
+      paymentSats,
+      netCashSats,
     };
   };
 
@@ -171,12 +172,14 @@ ${index + 1}. Inscription #${ord.inscription.number || ord.inscription.id.slice(
 Total Ordinals Sold:        ${txResult.ordinalCount}
 Total Cost Basis:           ${txResult.totals.totalPurchase.toFixed(8)} BTC
 Total Sale Proceeds:        ${(600 * txResult.ordinalCount / 100000000).toFixed(8)} BTC
+Harvy Service Fee:          ${txResult.totals.feeSats.toLocaleString()} sats
 Total Capital Loss:         ${txResult.totals.totalLoss.toFixed(8)} BTC
 
 USD Values (at time of sale):
   BTC Price:                $${btcPriceUSD?.toLocaleString() || 'N/A'}
   Total Loss (USD):         $${txResult.totals.taxLossUSD.toFixed(2)}
   Est. Tax Savings (${userTaxRate}%): $${txResult.totals.taxSavingsUSD.toFixed(2)}
+  Harvy Fee (USD):          $${txResult.totals.feeUSD.toFixed(2)}
 
 --------------------------------------------------------------------------------
                               VERIFICATION
@@ -350,10 +353,10 @@ guidance on reporting cryptocurrency transactions.
 
         <div className="sale-mechanics-banner">
           <div className="sale-mechanics-line">
-            Harvy pays fixed dust proceeds for each selected ordinal.
+            Harvy pays 600 sats per ordinal and charges a flat {configuredFeeSats.toLocaleString()} sat service fee per batch.
           </div>
           <div className="sale-mechanics-subline">
-            You enter basis manually, Harvy records the on-chain sale, and your wallet sets the network fee at signing.
+            You enter basis manually, Harvy records the on-chain sale, and Harvy currently covers the miner fee for this batched transaction.
           </div>
         </div>
 
@@ -466,18 +469,23 @@ guidance on reporting cryptocurrency transactions.
               </div>
 
               <div className="benefit-row">
-                <span>Service Fee (Flat {totals.feePercent}%)</span>
-                <span>-${totals.feeUSD.toFixed(2)}</span>
+                <span>Service Fee</span>
+                <span>{totals.feeSats.toLocaleString()} sats (${totals.feeUSD.toFixed(2)})</span>
               </div>
 
               <div className="benefit-row">
-                <span>Network Fee</span>
-                <span>Set by wallet at signing</span>
+                <span>Miner Fee</span>
+                <span>Covered by Harvy in the current batch flow</span>
               </div>
 
               <div className="benefit-row">
                 <span>Harvy Pays You</span>
                 <span>{totals.paymentSats.toLocaleString()} sats</span>
+              </div>
+
+              <div className="benefit-row">
+                <span>Net Sats After Harvy Fee</span>
+                <span>{totals.netCashSats >= 0 ? '' : '-'}{Math.abs(totals.netCashSats).toLocaleString()} sats</span>
               </div>
 
               <div className="benefit-row total">
@@ -487,7 +495,7 @@ guidance on reporting cryptocurrency transactions.
               <div className="benefit-row" style={{ fontSize: '12px', color: '#a0a4b8', marginTop: '8px' }}>
                 <span>In plain English</span>
                 <span>
-                  You&apos;ll receive {totals.paymentSats.toLocaleString()} sats and an estimated net tax benefit of ${totals.netBenefitUSD.toFixed(2)} after Harvy&apos;s fee.
+                  You&apos;ll sell for {totals.paymentSats.toLocaleString()} sats, pay Harvy&apos;s {totals.feeSats.toLocaleString()} sat service fee, and keep an estimated net tax benefit of ${totals.netBenefitUSD.toFixed(2)} after the fee.
                 </span>
               </div>
               <div className="benefit-row" style={{ fontSize: '12px', color: '#a0a4b8', marginTop: '8px' }}>

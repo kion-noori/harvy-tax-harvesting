@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as bitcoin from 'bitcoinjs-lib';
 
 import {
-  calculateServiceFee,
+  getFlatServiceFeeSats,
   getNetwork,
   satsToUSD,
   usdToSats,
@@ -74,20 +74,12 @@ test.afterEach(() => {
   restoreEnv();
 });
 
-test('calculateServiceFee uses the flat configured percentage', () => {
-  delete process.env.FLAT_SERVICE_FEE_PERCENT;
-  assert.deepEqual(calculateServiceFee(100), {
-    feeUSD: 10,
-    feePercent: 10,
-    model: 'flat',
-  });
+test('getFlatServiceFeeSats uses the configured sat amount', () => {
+  delete process.env.FLAT_SERVICE_FEE_SATS;
+  assert.equal(getFlatServiceFeeSats(), 1000);
 
-  process.env.FLAT_SERVICE_FEE_PERCENT = '7.5';
-  assert.deepEqual(calculateServiceFee(200), {
-    feeUSD: 15,
-    feePercent: 7.5,
-    model: 'flat',
-  });
+  process.env.FLAT_SERVICE_FEE_SATS = '1500';
+  assert.equal(getFlatServiceFeeSats(), 1500);
 });
 
 test('usdToSats and satsToUSD round consistently enough for UI math', () => {

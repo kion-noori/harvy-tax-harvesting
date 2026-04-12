@@ -11,7 +11,7 @@ Most crypto tax tools tell you *what* you owe. None of them help you *reduce* wh
 Harvy buys your underwater Ordinals directly — no listings, no waiting, no counterparty risk. You connect your wallet, select the ordinals you want to sell, manually enter your cost basis, and sell them to Harvy in a single atomic transaction. Harvy records the on-chain sale and gives you a downloadable receipt you can use with your tax records.
 
 - **Instant liquidity** — Sell losing Ordinals in one click. No marketplace, no buyers needed.
-- **You keep the savings** — Harvy charges a flat fee on the estimated tax benefit. You keep the rest.
+- **Simple flat fee** — Harvy pays 600 sats per ordinal and charges a flat 1,000 sat service fee per batch transaction.
 - **Non-custodial** — Every transaction uses PSBTs (Partially Signed Bitcoin Transactions). Your private keys never leave your wallet.
 
 ## How It Works
@@ -60,7 +60,7 @@ The frontend runs on `http://localhost:3000`, backend on `http://localhost:3001`
 | `MEMPOOL_API_URL` | Mempool.space API endpoint |
 | `HARVY_WALLET_ADDRESS` | Harvy's Bitcoin wallet address (Taproot) |
 | `HARVY_WALLET_PRIVATE_KEY` | Harvy's wallet private key (WIF format) |
-| `FLAT_SERVICE_FEE_PERCENT` | Flat Harvy fee percentage on estimated tax savings |
+| `FLAT_SERVICE_FEE_SATS` | Flat Harvy fee in sats per batch transaction |
 
 Frontend environment:
 - `REACT_APP_API_URL` — frontend API base URL
@@ -89,7 +89,7 @@ Frontend environment:
 Harvy uses **atomic swaps via PSBT** so neither party needs to trust the other:
 
 1. Backend looks up each inscription’s **current UTXO** (Magic Eden `output` or Hiro fallback) — inscription ID is reveal txid, not current location.
-2. Backend builds a PSBT with **inputs**: seller’s inscription UTXOs first, then Harvy’s funding UTXOs. **Outputs**: each inscription → Harvy (value preserved or padded to dust), then seller payment (e.g. 600 sats × N), then service-fee and change to Harvy if above dust.
+2. Backend builds a PSBT with **inputs**: seller’s inscription UTXOs first, then seller fee-paying BTC inputs, then Harvy’s funding UTXOs. **Outputs**: each inscription → Harvy (value preserved or padded to dust), then seller payout, then flat service-fee and change to Harvy if above dust.
 3. **Input/output order is FIFO-critical:** inscription inputs and inscription outputs come first so ordinal sat positions are preserved; otherwise inscription sats could be consumed as miner fee.
 4. Backend signs Harvy’s inputs with **Taproot key-path** (tweaked key, SIGHASH_DEFAULT). Seller’s wallet signs inscription inputs (tapInternalKey from wallet or derived from address).
 5. Frontend sends the fully-signed PSBT to `/api/finalize-psbt`. Backend **validates** the PSBT (single non-Harvy output, amount caps, Harvy inputs present) then finalizes and broadcasts via Mempool.space.
@@ -108,7 +108,7 @@ All outputs are standard (decodeable) and dust-padded (min 546 sats) where appli
 
 ## Status
 
-**Working:** Multi-wallet connect (Xverse, Unisat, Leather); Xverse-first batched PSBT create/sign/broadcast with FIFO ordering; server-side BTC price and fee/tax math; pre-broadcast PSBT validation; downloadable tax receipt; one confirmed mainnet tx in the wild.
+**Working:** Multi-wallet connect (Xverse, Unisat, Leather); Xverse-first batched PSBT create/sign/broadcast with FIFO ordering; server-side BTC price and flat-sat fee math; pre-broadcast PSBT validation; downloadable tax receipt; one confirmed mainnet tx in the wild.
 
 **Next (technical roadmap):** Broader Xverse testing; Unisat/Leather sell-path hardening; dynamic fee rate from Mempool API; broader edge-case hardening.
 

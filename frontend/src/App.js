@@ -127,7 +127,7 @@ export default function App() {
                 <div className="feature-divider"></div>
                 <div className="feature-item">
                   <h3>You keep the savings</h3>
-                  <p>Our fee is a flat percentage of your estimated tax benefit, with the on-chain network fee shown separately.</p>
+                  <p>Harvy pays 600 sats per ordinal and charges a flat 1,000 sat service fee per batch transaction.</p>
                 </div>
                 <div className="feature-divider"></div>
                 <div className="feature-item">
@@ -144,7 +144,7 @@ export default function App() {
                 {[
                   {
                     q: "How does Harvy make money?",
-                    a: "We charge a flat service fee based on your estimated tax savings. You still see the on-chain network fee separately."
+                    a: "We currently pay 600 sats per ordinal and charge a flat 1,000 sat service fee per batch transaction."
                   },
                   {
                     q: "Is this safe?",

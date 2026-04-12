@@ -2,9 +2,17 @@
 
 Superseded for current operational state by [PROJECT_STATUS.md](/Users/kionnoori/my-nft-project/PROJECT_STATUS.md). Use this file as historical/architectural context and verify details against the live code.
 
+## Resume Here
+
+- Primary handoff file: [PROJECT_STATUS.md](/Users/kionnoori/my-nft-project/PROJECT_STATUS.md)
+- Current live fee model: `600 sats` paid per ordinal and a flat `1,000 sat` Harvy service fee per batch transaction
+- Current in-app sell path: Xverse-first only
+- Current testing precondition: seller needs at least one ordinary BTC UTXO on the same Taproot address, not just inscription UTXOs
+- Next priority: real Xverse end-to-end testing of the new flat-fee batch flow
+
 ## What This Is
 
-Harvy is a web app that lets Bitcoin Ordinal holders sell their underwater (at-a-loss) inscriptions to Harvy's wallet via atomic swaps (PSBTs). Users realize capital losses for tax purposes. Harvy charges a percentage of the tax savings as a service fee.
+Harvy is a web app that lets Bitcoin Ordinal holders sell their underwater (at-a-loss) inscriptions to Harvy's wallet via atomic swaps (PSBTs). Users realize capital losses for tax purposes. Harvy currently pays `600 sats` per ordinal and charges a flat `1,000 sat` service fee per batch transaction.
 
 **One confirmed mainnet transaction already:** `9478c6fb8da8f2c0f766a5e981a68ce4eea374d81b18cb34033baac630694b54` (block 937,777). The core PSBT engine works.
 
@@ -67,15 +75,7 @@ HARVY_WALLET_ADDRESS=<bc1p-address>    # Harvy's Taproot receiving address
 HARVY_WALLET_PRIVATE_KEY=<WIF-key>     # WIF-encoded mainnet private key (CRITICAL SECRET)
 BITCOIN_NETWORK=mainnet
 MEMPOOL_API_URL=https://mempool.space/api
-FEE_TIER_1_MAX=100                     # Service fee tiers (% of tax savings)
-FEE_TIER_1_PERCENT=5
-FEE_TIER_2_MAX=500
-FEE_TIER_2_PERCENT=7
-FEE_TIER_3_MAX=2000
-FEE_TIER_3_PERCENT=10
-FEE_TIER_4_MAX=10000
-FEE_TIER_4_PERCENT=12
-FEE_TIER_5_PERCENT=15
+FLAT_SERVICE_FEE_SATS=1000            # Flat Harvy service fee per batch transaction
 MIN_ORDINAL_PAYMENT_SATS=600           # Dust-limit payment per ordinal
 ASSUMED_TAX_RATE=0.30
 ```
@@ -95,7 +95,8 @@ REACT_APP_API_URL=http://localhost:3001
 3. Backend:
    - Looks up each inscription's current UTXO via Magic Eden API (Hiro as fallback)
    - Fetches Harvy's UTXOs from mempool.space
-   - Builds a PSBT with FIFO ordering (inscription inputs FIRST, then Harvy's funding inputs)
+   - Fetches seller ordinary BTC UTXOs to fund the flat fee
+   - Builds a PSBT with FIFO ordering (inscription inputs FIRST, then seller fee-paying BTC inputs, then Harvy's funding inputs)
    - Signs Harvy's inputs with the tweaked Taproot key
    - Returns partially-signed PSBT + seller's input indices
 4. Frontend asks the user's wallet (Xverse/Unisat/Leather) to sign the seller's inputs
@@ -107,12 +108,13 @@ REACT_APP_API_URL=http://localhost:3001
 ```
 INPUTS (FIFO ORDER — inscription inputs first!):
   [0..N-1]  Seller's inscription UTXOs (seller signs)
-  [N..M]    Harvy's funding UTXOs (Harvy signs server-side)
+  [N..K]    Seller's ordinary BTC UTXOs for the flat service fee (seller signs)
+  [K..M]    Harvy's funding UTXOs (Harvy signs server-side)
 
 OUTPUTS (inscription outputs first!):
   [0..N-1]  Each inscription → Harvy's address (preserving UTXO value)
-  [N]       Payment to seller (600 sats × ordinal count)
-  [N+1]     Service fee → Harvy (if above dust limit)
+  [N]       Payment to seller (Harvy proceeds plus any seller-side fee-change refund)
+  [N+1]     Flat service fee → Harvy
   [N+2]     Change → Harvy (if above dust limit)
 ```
 
@@ -198,21 +200,18 @@ The inscription ID format is `<reveal_txid>i<vout>` — this is the REVEAL trans
 ## Known Security Issues (Prioritized)
 
 ### CRITICAL — Must fix before public launch
-1. **`/api/finalize-psbt` has no PSBT validation** — broadcasts ANY PSBT without verifying outputs. An attacker could craft a PSBT that drains Harvy's wallet. Currently protected only by: (a) rate limiting, and (b) keeping Harvy's wallet balance low.
-   - **Fix needed:** Parse the PSBT before broadcast, verify inscription outputs go to Harvy, verify payment matches expected amounts, verify no unexpected outputs.
-
-2. **Private key in plaintext `.env`** — if server is compromised, wallet is instantly drained.
+1. **Private key in plaintext `.env`** — if server is compromised, wallet is instantly drained.
    - **Beta mitigation:** Keep wallet funded with minimal BTC only.
    - **Production fix:** HSM, multi-sig, or hardware wallet signing.
 
-### HIGH
-3. **BTC price comes from client** — frontend fetches from CoinGecko and sends to backend. Attacker can manipulate to change fee calculations.
-   - **Fix:** Backend should fetch its own BTC price server-side.
+2. **The new flat-fee batch path needs live wallet confirmation** — code is updated, but Xverse still needs real-world testing with both inscription inputs and ordinary BTC fee-paying inputs.
+   - **Next validation:** single ordinal, multi-ordinal, and duplicate-submit cases with a wallet that has ordinary BTC on the same Taproot address.
 
-4. **No authentication** — any HTTP request to the API works. No session verification that the caller is the wallet owner.
+### HIGH
+3. **No authentication** — any HTTP request to the API works. No session verification that the caller is the wallet owner.
    - **Beta mitigation:** Acceptable with rate limiting for trusted friends.
 
-5. **`purchasePriceSats` is self-reported** — users can lie about purchase price to inflate tax receipts.
+4. **`purchasePriceSats` is self-reported** — users can lie about purchase price to inflate tax receipts.
    - **Business risk, not security.** Receipt has disclaimer. Could cross-reference with on-chain activity data.
 
 ### MEDIUM
@@ -237,7 +236,7 @@ The inscription ID format is `<reveal_txid>i<vout>` — this is the REVEAL trans
 - Transaction broadcasting to mainnet via mempool.space
 - Tax receipt generation and download
 - Success screen with explorer link
-- Service fee calculation (tiered 5-15%)
+- Flat fee calculation (`1,000 sats` per batch)
 - Rate limiting on all endpoints
 - CSP security headers
 - Cache management
@@ -248,7 +247,8 @@ The inscription ID format is `<reveal_txid>i<vout>` — this is the REVEAL trans
 
 ### Before Beta (friends testing)
 - [ ] Keep Harvy wallet funded with small amount only (spending cap safety net)
-- [ ] Test sell flow end-to-end again (one confirmed tx already exists)
+- [ ] Test the new flat-fee Xverse batch flow end-to-end
+- [ ] Confirm seller wallet behavior when it must sign both inscription inputs and ordinary BTC fee inputs
 - [ ] Record demo video for README
 
 ### Before Public Launch

@@ -6,6 +6,7 @@ Primary reference file for future sessions. Update this document at the end of e
 ## Current Product State
 
 - Harvy is a Bitcoin Ordinals tax-loss harvesting tool where Harvy buys low-value ordinals for a fixed dust payment.
+- Current economics: Harvy pays `600 sats` per ordinal and charges a flat `1,000 sat` service fee per batch transaction.
 - Users manually enter their own cost basis. Harvy records sale proceeds, not verified purchase history.
 - Wallet connection exists for Xverse, Unisat, and Leather.
 - The in-app sell flow is currently hardened for Xverse first.
@@ -70,6 +71,7 @@ Verification completed:
 
 - Keep Harvy wallet balances conservative until more production testing is done.
 - Check [transaction-events.ndjson](/Users/kionnoori/my-nft-project/transaction-events.ndjson) after manual tests for a durable audit trail.
+- For the current flat-fee batch flow, the seller needs at least one ordinary spendable BTC UTXO on the same Taproot address, not just inscription UTXOs.
 - Older summary docs in the repo may contain stale assumptions; prefer this file first.
 
 ## Next Recommended Pass
@@ -79,4 +81,5 @@ Verification completed:
   - multi-ordinal sale
   - duplicate submit / already-broadcast case
   - invalid tax-rate and invalid purchase-price checks
+- During that pass, verify the wallet can sign both inscription inputs and ordinary BTC fee-paying inputs on the same address.
 - After that, decide whether to harden Unisat or Leather next.

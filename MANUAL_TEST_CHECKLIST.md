@@ -10,6 +10,7 @@ Validate the hardened Xverse-first sell flow before expanding wallet support.
 
 - Confirm `BITCOIN_NETWORK` and `REACT_APP_BITCOIN_NETWORK` match.
 - Confirm `HARVY_WALLET_ADDRESS` and `HARVY_WALLET_PRIVATE_KEY` are set.
+- Confirm the seller wallet has at least one ordinary BTC UTXO on the same Taproot address to fund the flat `1,000 sat` service fee.
 - Start backend: `node server.js`
 - Start frontend: `cd frontend && npm start`
 - Keep [transaction-events.ndjson](/Users/kionnoori/my-nft-project/transaction-events.ndjson) open during testing.
@@ -24,18 +25,21 @@ Validate the hardened Xverse-first sell flow before expanding wallet support.
 - Enter a valid purchase price above the fixed Harvy proceeds.
 - Confirm the modal shows:
   - sale proceeds of `600 sats`
+  - a flat `1,000 sat` Harvy service fee
   - estimated tax loss based on your entered basis
   - fee and net benefit
 - Sign in Xverse.
 - Confirm success UI appears.
 - Confirm explorer link opens the right network.
 - Confirm a `create_batch_psbt_requested` and `finalize_psbt_succeeded` event are written.
+- Confirm Xverse successfully signs both the inscription input and the seller's ordinary BTC fee-paying input(s).
 
 ### 2. Multi-Ordinal Sale
 
 - Select 2-3 ordinals.
 - Enter different purchase prices.
 - Confirm total sale proceeds equal `600 sats × ordinal count`.
+- Confirm the Harvy service fee remains `1,000 sats` for the whole batch, not per ordinal.
 - Sign and submit.
 - Confirm all selected ordinals are reflected in the transaction event log.
 

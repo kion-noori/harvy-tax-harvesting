@@ -29,7 +29,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "concurrently \"yarn start\" \"cd frontend && yarn start\"",
-    "install-all": "yarn install && cd frontend && yarn install"
+    "install-all": "yarn install && cd frontend && yarn install",
+    "test:backend": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11"

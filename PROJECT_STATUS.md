@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-08
+Last updated: 2026-04-12
 Primary reference file for future sessions. Update this document at the end of each meaningful pass.
 
 ## Current Product State
@@ -21,9 +21,12 @@ Primary reference file for future sessions. Update this document at the end of e
 
 ## Most Recent Pass
 
-Date: 2026-04-08
+Date: 2026-04-12
 
 Completed:
+- Added backend unit tests in [tests/psbt-utils.test.mjs](/Users/kionnoori/my-nft-project/tests/psbt-utils.test.mjs) using Node's built-in test runner.
+- Added root script `npm run test:backend`.
+- Added [MANUAL_TEST_CHECKLIST.md](/Users/kionnoori/my-nft-project/MANUAL_TEST_CHECKLIST.md) for the next Xverse testing round.
 - Updated legal/privacy copy to match the actual transaction-capable product.
 - Added `transaction-events.ndjson` to `.gitignore`.
 - Added frontend network env documentation to the README.
@@ -39,6 +42,7 @@ Completed:
 - Cleaned up stale frontend test scaffolding so the local smoke test passes.
 
 Verification completed:
+- `npm run test:backend`
 - `node --check server.js`
 - `node --check psbt-utils.js`
 - `cd frontend && npm test -- --watchAll=false`
@@ -48,7 +52,7 @@ Verification completed:
 1. End-to-end Xverse sell testing on real/manual scenarios.
 2. Unisat sell-path hardening.
 3. Leather sell-path hardening.
-4. Real server-side unit/integration tests for fee math and PSBT handling.
+4. Expand backend tests beyond utility-level coverage into endpoint-level cases.
 5. Optional dynamic fee-rate support from mempool.
 
 ## Operational Notes

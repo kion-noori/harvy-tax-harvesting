@@ -7,6 +7,8 @@ import OrdinalMedia from './OrdinalMedia';
  * Click to select for bulk selling
  */
 export default function OrdinalPriceCard({ inscription, isSelected, onSelect }) {
+  const title = inscription.display_name || inscription.collection_name || 'Untitled inscription';
+  const collection = inscription.collection_name || 'Uncategorized';
 
   // Handle card click for selection
   const handleClick = () => {
@@ -32,6 +34,15 @@ export default function OrdinalPriceCard({ inscription, isSelected, onSelect }) 
         {typeof inscription.number === 'number'
           ? `Inscription #${inscription.number}`
           : inscription.id.slice(0, 12) + '...'}
+      </div>
+
+      <div className="ordinal-card-meta">
+        <div className="ordinal-card-title" title={title}>
+          {title}
+        </div>
+        <div className="ordinal-card-collection" title={collection}>
+          {collection}
+        </div>
       </div>
 
       {/* Ordinal media */}

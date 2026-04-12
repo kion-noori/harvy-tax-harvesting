@@ -1273,6 +1273,40 @@ body > * {
   letter-spacing: 0.5px;
 }
 
+.ordinal-card-meta {
+  margin-bottom: 12px;
+}
+
+.ordinal-card-title {
+  color: #f5f7ff;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 8px;
+}
+
+.ordinal-card-collection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(247, 147, 26, 0.12);
+  border: 1px solid rgba(247, 147, 26, 0.24);
+  color: #f3b05c;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Media Container - uniform sizing for all ordinals */
 /* BACKUP (before subtle improvements):
 .ordinal-media-container {
@@ -2442,6 +2476,215 @@ body > * {
   line-height: 1.4;
 }
 
+/* ==================== Ordinals Browser ==================== */
+
+.ordinals-shell {
+  margin-bottom: 20px;
+}
+
+.ordinals-intro-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
+  gap: 20px;
+  margin-bottom: 16px;
+  padding: 24px;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(20, 22, 29, 0.96) 0%, rgba(12, 14, 20, 0.98) 100%);
+  border: 1px solid rgba(247, 147, 26, 0.16);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+}
+
+.ordinals-intro-eyebrow {
+  margin-bottom: 10px;
+  color: #f0ab55;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ordinals-intro-title {
+  margin: 0 0 10px 0;
+  color: #fff3d6;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.ordinals-intro-copy {
+  max-width: 700px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.ordinals-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-self: end;
+}
+
+.ordinals-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ordinals-stat-card.active {
+  background: linear-gradient(135deg, rgba(247, 147, 26, 0.15), rgba(255, 107, 53, 0.08));
+  border-color: rgba(247, 147, 26, 0.25);
+}
+
+.ordinals-stat-label {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ordinals-stat-value {
+  color: #fff;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.ordinals-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.5fr) auto;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(10, 12, 17, 0.88);
+  border: 1px solid rgba(247, 147, 26, 0.12);
+}
+
+.ordinals-toolbar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ordinals-toolbar-field.search {
+  min-width: 0;
+}
+
+.ordinals-toolbar-label {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ordinals-toolbar-select,
+.ordinals-toolbar-input {
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8f8fb;
+  font-size: 14px;
+}
+
+.ordinals-toolbar-select:focus,
+.ordinals-toolbar-input:focus {
+  outline: none;
+  border-color: rgba(247, 147, 26, 0.55);
+  box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.12);
+}
+
+.ordinals-toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  align-self: end;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ordinals-toolbar-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 13px;
+}
+
+.ordinals-selection-bar {
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(22, 163, 74, 0.05));
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ordinals-selection-text {
+  color: #56d088;
+  font-weight: 700;
+}
+
+.ordinals-clear-button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #b6bccb;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.ordinals-clear-button:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.ordinals-empty-filter {
+  padding: 24px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+
+.ordinals-empty-title {
+  margin-bottom: 8px;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.ordinals-empty-copy {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 14px;
+}
+
+.ordinals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
 /* ==================== Card Hover States ==================== */
 
 .ordinal-price-card:hover {
@@ -2456,4 +2699,49 @@ body > * {
 
 .ordinal-price-card:hover .ordinal-card-header {
   color: #F7931A;
+}
+
+@media (max-width: 960px) {
+  .ordinals-intro-card {
+    grid-template-columns: 1fr;
+  }
+
+  .ordinals-stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ordinals-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .ordinals-toolbar-toggle {
+    align-self: stretch;
+  }
+
+  .ordinals-toolbar-summary {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .ordinals-intro-card {
+    padding: 18px;
+  }
+
+  .ordinals-intro-title {
+    font-size: 24px;
+  }
+
+  .ordinals-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ordinals-selection-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ordinals-grid {
+    grid-template-columns: 1fr;
+  }
 }

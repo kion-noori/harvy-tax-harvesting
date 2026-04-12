@@ -1,5 +1,5 @@
 // frontend/src/components/OrdinalMedia.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import '@google/model-viewer';
 
 /**
@@ -15,13 +15,35 @@ export default function OrdinalMedia({ id, contentType, contentUri, previewUri, 
   const [textContent, setTextContent] = useState(null);
   const [srcIndex, setSrcIndex] = useState(0);
 
-  // Build ordered list of content sources to try
-  const sources = [];
-  if (contentUri) sources.push(contentUri);
-  sources.push(`https://ordinals.com/content/${id}`);
-  sources.push(`https://api.hiro.so/ordinals/v1/inscriptions/${id}/content`);
+  const sources = useMemo(() => {
+    const prefersPreview =
+      ctype &&
+      (
+        ctype.startsWith('image/') ||
+        ctype.startsWith('video/') ||
+        ctype.startsWith('model/') ||
+        ctype.startsWith('audio/') ||
+        ctype.includes('svg')
+      );
+
+    const ordered = prefersPreview
+      ? [previewUri, contentUri]
+      : [contentUri, previewUri];
+
+    ordered.push(`https://ordinals.com/content/${id}`);
+    ordered.push(`https://api.hiro.so/ordinals/v1/inscriptions/${id}/content`);
+
+    return ordered.filter((value, index, arr) => value && arr.indexOf(value) === index);
+  }, [ctype, contentUri, id, previewUri]);
 
   const src = sources[srcIndex] || sources[0];
+
+  useEffect(() => {
+    setSrcIndex(0);
+    setImageError(false);
+    setError(false);
+    setTextContent(null);
+  }, [id, contentUri, previewUri, ctype]);
 
   const tryNextSource = () => {
     if (srcIndex < sources.length - 1) {
@@ -130,6 +152,7 @@ export default function OrdinalMedia({ id, contentType, contentUri, previewUri, 
           alt={collectionName || `Inscription ${id}`}
           style={{ width: '100%', height: 'auto', objectFit: 'cover', borderRadius: 8 }}
           loading="lazy"
+          decoding="async"
           onError={() => setImageError(true)}
         />
       );
@@ -165,6 +188,7 @@ export default function OrdinalMedia({ id, contentType, contentUri, previewUri, 
         alt={`Inscription ${id}`}
         style={{ width: '100%', height: 'auto', objectFit: 'cover', borderRadius: 8 }}
         loading="lazy"
+        decoding="async"
         onError={tryNextSource}
       />
     );

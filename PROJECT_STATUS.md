@@ -24,6 +24,11 @@ Primary reference file for future sessions. Update this document at the end of e
 Date: 2026-04-12
 
 Completed:
+- Reworked the ordinals browser around collection-first discovery, with a collection dropdown, text filter, faster summary toolbar, and clearer selection state.
+- Updated ordinal cards to show display name and collection metadata for quicker scanning.
+- Shifted media rendering toward preview-first loading for image/video/model/audio content when safe, which improves perceived grid speed.
+- Added clearer sell-modal mechanics copy and surfaced network-fee handling more explicitly in the UI.
+- Fixed frontend fee-display consistency so the modal uses the configured flat fee percentage instead of a stale hardcoded value.
 - Simplified Harvy pricing from tiered service fees to a flat service-fee percentage.
 - Added backend unit tests in [tests/psbt-utils.test.mjs](/Users/kionnoori/my-nft-project/tests/psbt-utils.test.mjs) using Node's built-in test runner.
 - Added root script `npm run test:backend`.
@@ -47,6 +52,7 @@ Verification completed:
 - `node --check server.js`
 - `node --check psbt-utils.js`
 - `cd frontend && npm test -- --watchAll=false`
+- `cd frontend && npm run build`
 
 ## Open Priorities
 
@@ -55,6 +61,7 @@ Verification completed:
 3. Leather sell-path hardening.
 4. Expand backend tests beyond utility-level coverage into endpoint-level cases.
 5. Optional dynamic fee-rate support from mempool.
+6. Decide whether to suppress or ignore the third-party `jsontokens` build source-map warnings.
 
 ## Operational Notes
 

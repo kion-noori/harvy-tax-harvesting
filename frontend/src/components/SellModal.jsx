@@ -7,6 +7,8 @@ import '../styles/SellModal.css';
  * Shows each ordinal with editable purchase price, calculates totals
  */
 export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, btcAddress, walletType, btcPublicKey }) {
+  const rawFeePercent = Number(process.env.REACT_APP_FLAT_SERVICE_FEE_PERCENT || 10);
+  const configuredFeePercent = Number.isFinite(rawFeePercent) ? rawFeePercent : 10;
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
   const [txResult, setTxResult] = useState(null);
@@ -99,7 +101,7 @@ export default function SellModal({ selectedOrdinals, onClose, onSaleComplete, b
     const taxRate = userTaxRate / 100;
     const taxLossUSD = btcPriceUSD ? totalLoss * btcPriceUSD : 0;
     const taxSavingsUSD = taxLossUSD * taxRate;
-    const feePercent = 10;
+    const feePercent = configuredFeePercent;
     const feeUSD = taxSavingsUSD * (feePercent / 100);
     const netBenefitUSD = taxSavingsUSD - feeUSD;
     const paymentSats = 600 * validCount; // 600 sats per ordinal
@@ -346,6 +348,15 @@ guidance on reporting cryptocurrency transactions.
         <h2 className="modal-title">Sell to Harvy</h2>
         <p className="modal-subtitle">{selectedOrdinals.length} ordinal{selectedOrdinals.length !== 1 ? 's' : ''} selected</p>
 
+        <div className="sale-mechanics-banner">
+          <div className="sale-mechanics-line">
+            Harvy pays fixed dust proceeds for each selected ordinal.
+          </div>
+          <div className="sale-mechanics-subline">
+            You enter basis manually, Harvy records the on-chain sale, and your wallet sets the network fee at signing.
+          </div>
+        </div>
+
         {/* Ordinals List with Price Inputs */}
         <div className="ordinals-price-list">
           {selectedOrdinals.map((ord, index) => (
@@ -457,6 +468,11 @@ guidance on reporting cryptocurrency transactions.
               <div className="benefit-row">
                 <span>Service Fee (Flat {totals.feePercent}%)</span>
                 <span>-${totals.feeUSD.toFixed(2)}</span>
+              </div>
+
+              <div className="benefit-row">
+                <span>Network Fee</span>
+                <span>Set by wallet at signing</span>
               </div>
 
               <div className="benefit-row">

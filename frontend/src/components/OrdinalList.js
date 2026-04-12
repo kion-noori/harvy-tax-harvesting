@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import OrdinalPriceCard from './OrdinalPriceCard';
 import SellModal from './SellModal';
 
@@ -16,18 +16,21 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
-  const [displayCount, setDisplayCount] = useState(200); // Show all loaded items
+  const [displayCount, setDisplayCount] = useState(48);
   const [excludeBrc20, setExcludeBrc20] = useState(true); // Filter BRC-20 by default
   const [totalInscriptions, setTotalInscriptions] = useState(0);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const ITEMS_PER_PAGE = 24;
+  const INITIAL_DISPLAY_COUNT = 48;
 
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   // Sell modal state - now handles multiple ordinals
   const [showSellModal, setShowSellModal] = useState(false);
+  const [selectedCollection, setSelectedCollection] = useState('all');
+  const [filterText, setFilterText] = useState('');
 
   // Handle ordinal selection toggle
   const handleSelectOrdinal = (inscriptionId) => {
@@ -69,6 +72,11 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
     setShowSellModal(false);
   };
 
+  useEffect(() => {
+    setSelectedCollection('all');
+    setFilterText('');
+  }, [address, excludeBrc20]);
+
   // Get selected ordinal items
   const getSelectedOrdinals = () => {
     return items
@@ -104,6 +112,7 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
       setItems([]); // Clear previous results only on fresh load
       setCurrentOffset(0);
       setSelectedIds(new Set()); // Clear selections on new load
+      setDisplayCount(INITIAL_DISPLAY_COUNT);
     }
 
     try {
@@ -169,7 +178,7 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
       }
 
       if (!append) {
-        setDisplayCount(200); // Show all loaded items on fresh load
+        setDisplayCount(INITIAL_DISPLAY_COUNT);
       }
 
       setLoading(false);
@@ -189,6 +198,46 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
     }
   }, [address, excludeBrc20]);
 
+  const collections = useMemo(() => {
+    const counts = new Map();
+    for (const item of items) {
+      const key = item.collection_name || 'Uncategorized';
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+
+    return Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    const normalizedFilter = filterText.trim().toLowerCase();
+
+    return items.filter((item) => {
+      const collectionName = item.collection_name || 'Uncategorized';
+      const matchesCollection = selectedCollection === 'all' || collectionName === selectedCollection;
+      if (!matchesCollection) {
+        return false;
+      }
+
+      if (!normalizedFilter) {
+        return true;
+      }
+
+      const searchable = [
+        item.display_name,
+        collectionName,
+        item.id,
+        typeof item.number === 'number' ? String(item.number) : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return searchable.includes(normalizedFilter);
+    });
+  }, [filterText, items, selectedCollection]);
+
   // Auto-load when address comes from wallet/connect or filter changes
   useEffect(() => {
     if (isTaproot(address)) load();
@@ -198,13 +247,13 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
   useEffect(() => {
     const handleScroll = () => {
       const scrolledToBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 500;
-      const hasMoreToDisplay = items.length > displayCount;
+      const hasMoreToDisplay = filteredItems.length > displayCount;
       const needsMoreData = hasMore && currentOffset < totalInscriptions;
 
       if (scrolledToBottom && !loading) {
         // Case 1: We have items loaded but not displayed yet - just increase display count
         if (hasMoreToDisplay) {
-          setDisplayCount(prev => Math.min(prev + ITEMS_PER_PAGE, items.length));
+          setDisplayCount(prev => Math.min(prev + ITEMS_PER_PAGE, filteredItems.length));
         }
         // Case 2: We've displayed everything but need to fetch more from API
         else if (needsMoreData) {
@@ -216,12 +265,15 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [loading, hasMore, currentOffset, load, items.length, displayCount, totalInscriptions]);
+  }, [loading, hasMore, currentOffset, load, filteredItems.length, displayCount, totalInscriptions]);
 
   // Get ordinals to display
-  const itemsToDisplay = React.useMemo(() => {
-    return items.slice(0, displayCount);
-  }, [items, displayCount]);
+  const itemsToDisplay = useMemo(() => {
+    return filteredItems.slice(0, displayCount);
+  }, [filteredItems, displayCount]);
+
+  const selectedCountInView = selectedIds.size;
+  const selectedCollectionInfo = collections.find((collection) => collection.name === selectedCollection) || null;
 
   // Show message if no wallet connected
   if (!address || !isTaproot(address)) {
@@ -246,49 +298,101 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
 
   return (
     <div style={{ maxWidth: '100%', padding: '0 20px' }}>
+      <div className="ordinals-shell">
+        <div className="ordinals-intro-card">
+          <div>
+            <div className="ordinals-intro-eyebrow">Ordinal Disposal Desk</div>
+            <h3 className="ordinals-intro-title">Choose a collection, then select the ordinals you want to sell.</h3>
+            <p className="ordinals-intro-copy">
+              We group what&apos;s already loaded from your wallet so the page feels instant after connect, then keep loading more as you scroll.
+            </p>
+          </div>
+          <div className="ordinals-stats-grid">
+            <div className="ordinals-stat-card">
+              <span className="ordinals-stat-label">Loaded</span>
+              <span className="ordinals-stat-value">{items.length}</span>
+            </div>
+            <div className="ordinals-stat-card">
+              <span className="ordinals-stat-label">Collections</span>
+              <span className="ordinals-stat-value">{collections.length}</span>
+            </div>
+            <div className="ordinals-stat-card active">
+              <span className="ordinals-stat-label">Selected</span>
+              <span className="ordinals-stat-value">{selectedCountInView}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="ordinals-toolbar">
+          <div className="ordinals-toolbar-field">
+            <label className="ordinals-toolbar-label" htmlFor="collection-filter">Collection</label>
+            <select
+              id="collection-filter"
+              className="ordinals-toolbar-select"
+              value={selectedCollection}
+              onChange={(e) => {
+                setSelectedCollection(e.target.value);
+                setDisplayCount(INITIAL_DISPLAY_COUNT);
+              }}
+            >
+              <option value="all">All collections ({items.length})</option>
+              {collections.map((collection) => (
+                <option key={collection.name} value={collection.name}>
+                  {collection.name} ({collection.count})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="ordinals-toolbar-field search">
+            <label className="ordinals-toolbar-label" htmlFor="inscription-filter">Filter</label>
+            <input
+              id="inscription-filter"
+              className="ordinals-toolbar-input"
+              type="text"
+              placeholder="Search by inscription, collection, or number"
+              value={filterText}
+              onChange={(e) => {
+                setFilterText(e.target.value);
+                setDisplayCount(INITIAL_DISPLAY_COUNT);
+              }}
+            />
+          </div>
+
+          <label className="ordinals-toolbar-toggle">
+            <input
+              type="checkbox"
+              checked={excludeBrc20}
+              onChange={(e) => setExcludeBrc20(e.target.checked)}
+            />
+            <span>Hide BRC-20</span>
+          </label>
+        </div>
+
+        <div className="ordinals-toolbar-summary">
+          <span>
+            Showing {itemsToDisplay.length} of {filteredItems.length} loaded inscriptions
+            {selectedCollection !== 'all' && selectedCollectionInfo ? ` in ${selectedCollectionInfo.name}` : ''}
+          </span>
+          {hasMore && totalInscriptions > items.length && (
+            <span>
+              Wallet load in progress: {items.length} of {totalInscriptions} fetched so far.
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Selection info bar */}
       {selectedIds.size > 0 && (
-        <div style={{
-          marginBottom: 16,
-          padding: '12px 16px',
-          background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(22, 163, 74, 0.05))',
-          border: '1px solid rgba(34, 197, 94, 0.3)',
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <span style={{ color: '#22c55e', fontWeight: 600 }}>
+        <div className="ordinals-selection-bar">
+          <span className="ordinals-selection-text">
             {selectedIds.size} ordinal{selectedIds.size !== 1 ? 's' : ''} selected
           </span>
-          <button
-            onClick={handleClearSelection}
-            style={{
-              background: 'transparent',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              color: '#aaa',
-              padding: '6px 12px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '13px'
-            }}
-          >
+          <button onClick={handleClearSelection} className="ordinals-clear-button">
             Clear Selection
           </button>
         </div>
       )}
-
-      {/* BRC-20 Filter Toggle */}
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: '#aaa' }}>
-          <input
-            type="checkbox"
-            checked={excludeBrc20}
-            onChange={(e) => setExcludeBrc20(e.target.checked)}
-          />
-          <span>Hide BRC-20 tokens (show only images/videos)</span>
-        </label>
-      </div>
 
       {/* How it works - onboarding section */}
       {!loading && items.length > 0 && selectedIds.size === 0 && (
@@ -338,7 +442,7 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
           }}></div>
           <div style={{ marginBottom: '10px', fontSize: '16px' }}>Loading your ordinals...</div>
           <div style={{ fontSize: '12px', opacity: 0.7 }}>
-            This may take a few moments
+            Fetching wallet contents and grouping collections
           </div>
         </div>
       )}
@@ -397,8 +501,17 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
         </div>
       )}
 
+      {!loading && !err && items.length > 0 && filteredItems.length === 0 && (
+        <div className="ordinals-empty-filter">
+          <div className="ordinals-empty-title">No matching inscriptions</div>
+          <div className="ordinals-empty-copy">
+            Try a different collection or clear your search filter.
+          </div>
+        </div>
+      )}
+
       {/* Render ordinals grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+      <div className="ordinals-grid">
         {itemsToDisplay.map((it) => (
           <OrdinalPriceCard
             key={it.id}
@@ -410,7 +523,7 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
       </div>
 
       {/* End of results message */}
-      {!loading && items.length > 0 && !hasMore && displayCount >= items.length && (
+      {!loading && filteredItems.length > 0 && !hasMore && displayCount >= filteredItems.length && (
         <div style={{
           textAlign: 'center',
           marginTop: '32px',
@@ -423,13 +536,13 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
         }}>
           <div style={{ marginBottom: '8px', fontSize: '16px' }}>✓ All ordinals loaded</div>
           <div>
-            Showing all {items.length} inscriptions
+            Showing all {filteredItems.length} matching inscriptions
           </div>
         </div>
       )}
 
       {/* Scroll for more hint */}
-      {!loading && items.length > 0 && (items.length > displayCount || hasMore) && (
+      {!loading && filteredItems.length > 0 && (filteredItems.length > displayCount || hasMore) && (
         <div style={{
           textAlign: 'center',
           marginTop: '24px',
@@ -438,7 +551,7 @@ export default function OrdinalList({ btcAddress: connectedAddress, walletType, 
           fontSize: '13px',
           fontStyle: 'italic'
         }}>
-          Scroll down to load more... (showing {displayCount} of {totalInscriptions})
+          Scroll down to load more... (showing {Math.min(displayCount, filteredItems.length)} of {filteredItems.length} loaded matches)
         </div>
       )}
 

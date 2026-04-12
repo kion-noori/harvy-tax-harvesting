@@ -646,6 +646,27 @@
   margin: -16px 0 24px 0;
 }
 
+.sale-mechanics-banner {
+  margin-bottom: 20px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(247, 147, 26, 0.12), rgba(255, 107, 53, 0.05));
+  border: 1px solid rgba(247, 147, 26, 0.24);
+}
+
+.sale-mechanics-line {
+  color: #fff4dc;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.sale-mechanics-subline {
+  color: #b8bed0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 /* Ordinals Price List */
 .ordinals-price-list {
   max-height: 300px;
